@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { AnalysisResult, JobCreated, JobStatus, Method, Sample, Scenario } from "./schemas";
+import { AnalysisResult, CalibrationInfo, EvalJob, JobCreated, JobStatus, Method, Sample, Scenario, type Label, type Thresholds } from "./schemas";
 
 // Same-origin in the browser: next.config.ts rewrites /api/* to the FastAPI server.
 // Uploads can go straight to the API (NEXT_PUBLIC_UPLOAD_BASE) to avoid proxy body limits.
@@ -15,7 +15,12 @@ async function request<T>(url: string, schema: z.ZodType<T>, init?: RequestInit)
   }
   const body = await res.json().catch(() => null);
   if (!res.ok) {
-    const detail = body && typeof body.detail === "string" ? body.detail : `Request failed (${res.status}).`;
+    const detail =
+      body && typeof body.detail === "string"
+        ? body.detail
+        : res.status >= 500
+          ? `The analysis server did not answer properly (error ${res.status}). Check that the backend window is still running, then try again.`
+          : `Request failed (${res.status}).`;
     throw new Error(detail);
   }
   const parsed = schema.safeParse(body);
@@ -55,4 +60,34 @@ export function listSamples() {
 
 export function listScenarios() {
   return request(`${API}/scenarios`, z.array(Scenario));
+}
+
+// ---- Accuracy testing ----
+
+export function evaluateUpload(file: File, label: Label, trueBpm: number | null) {
+  const form = new FormData();
+  form.append("file", file);
+  form.append("label", label);
+  if (trueBpm != null) form.append("true_bpm", String(trueBpm));
+  return request(`${UPLOAD_BASE}/evaluate`, JobCreated, { method: "POST", body: form });
+}
+
+export function getEvalJob(jobId: string) {
+  return request(`${API}/evaluate/${encodeURIComponent(jobId)}`, EvalJob, { cache: "no-store" });
+}
+
+export function getCalibration() {
+  return request(`${API}/calibration`, CalibrationInfo, { cache: "no-store" });
+}
+
+export function saveCalibration(t: Thresholds) {
+  return request(`${API}/calibration`, z.object({ ok: z.boolean() }), {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(t),
+  });
+}
+
+export function resetCalibration() {
+  return request(`${API}/calibration`, z.object({ ok: z.boolean() }), { method: "DELETE" });
 }

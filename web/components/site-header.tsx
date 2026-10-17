@@ -9,9 +9,10 @@ import { APP_NAME, TAGLINE } from "@/lib/copy";
 import { cn } from "@/lib/utils";
 
 const NAV = [
-  { href: "/", label: "Analyse" },
-  { href: "/how-it-works", label: "How it works" },
-  { href: "/limitations", label: "Limitations" },
+  { href: "/", label: "Analyse", short: "Analyse" },
+  { href: "/how-it-works", label: "How it works", short: "Science" },
+  { href: "/evaluate", label: "Accuracy", short: "Accuracy" },
+  { href: "/limitations", label: "Limitations", short: "Limits" },
 ];
 
 export function PulseMark({ className }: { className?: string }) {
@@ -63,7 +64,8 @@ function NavLinks({ pathname }: { pathname: string | null }) {
       href={n.href}
       className={cn("whitespace-nowrap rounded-md px-1.5 py-1.5 sm:px-3", pathname === n.href ? "text-fg font-medium" : "text-muted hover:text-fg")}
     >
-      {n.label}
+      <span className="sm:hidden">{n.short}</span>
+      <span className="hidden sm:inline">{n.label}</span>
     </Link>
   ));
 }

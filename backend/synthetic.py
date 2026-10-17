@@ -67,13 +67,15 @@ def _pulse_wave(phase):
     return np.sin(phase) + 0.3 * np.sin(2 * phase)
 
 
-def make_scenario(name: str, seed: int = 0, fps: float = 30.0, duration: float = 20.0) -> dict:
+def make_scenario(name: str, seed: int = 0, fps: float = 30.0, duration: float = 20.0,
+                  noise_scale: float = 1.0) -> dict:
     """Return {"rgb": {forehead, left, right, background: (T,3)}, "fps", "true_bpm", "expected"}."""
     if name not in SCENARIOS:
         raise ValueError(f"unknown scenario {name!r}; choose from {list(SCENARIOS)}")
     rng = np.random.default_rng(seed)
     if name == "unable_short":
         duration = 4.0
+    # noise_scale multiplies the sensor noise (robustness sweeps in tools/accuracy_report.py)
     n = int(round(duration * fps))
     t = np.arange(n) / fps
 
@@ -83,7 +85,7 @@ def make_scenario(name: str, seed: int = 0, fps: float = 30.0, duration: float =
 
     skin = np.array(SKIN_TONES[seed % len(SKIN_TONES)], dtype=float)
     amp = 0.004                                                  # ~0.4 % intensity change (typical rPPG)
-    noise_sd = 0.10                                              # sensor noise on an ROI mean (many pixels averaged)
+    noise_sd = 0.10 * noise_scale                                # sensor noise on an ROI mean (many pixels averaged)
     illum = 1 + 0.02 * np.sin(2 * np.pi * 0.05 * t + rng.uniform(0, 6.28))  # slow light drift, shared
 
     pulses = {}

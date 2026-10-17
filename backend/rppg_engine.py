@@ -53,8 +53,9 @@ ROI_LABELS = {"forehead": "forehead", "left": "left cheek", "right": "right chee
 # The convex hull of each set is used as the ROI polygon.
 ROI_LANDMARKS = {
     "forehead": [10, 338, 297, 299, 296, 336, 9, 107, 66, 69, 67, 109],
-    "left": [345, 346, 347, 348, 349, 329, 371, 266, 425, 411, 352],
-    "right": [116, 117, 118, 119, 120, 100, 142, 36, 205, 187, 123],
+    # cheeks: from just below the eye down to the level of the nostrils, away from nose and mouth
+    "left": [345, 346, 347, 348, 349, 329, 371, 266, 425, 426, 427, 411, 376, 352, 280],
+    "right": [116, 117, 118, 119, 120, 100, 142, 36, 205, 206, 207, 187, 147, 123, 50],
 }
 EYE_OUTER = (33, 263)  # inter-ocular distance = face scale
 
@@ -77,13 +78,14 @@ ProgressFn = Optional[Callable[[float, str], None]]
 
 @dataclass
 class EngineConfig:
-    method: str = "POS"                 # "GREEN" | "CHROM" | "POS"
+    method: str = "POS"                 # "POS" (default) | "GREEN" | "CHROM"
     band_hz: tuple = (0.7, 3.0)         # 42-180 bpm (Seibold et al. 2025)
     filter_order: int = 5
     window_s: float = 10.0              # analysis window (Seibold: best HR stability at 10 s)
     step_s: float = 2.0
     min_duration_s: float = 6.0
     max_duration_s: float = 30.0
+    start_s: float = 0.0                # skip this many seconds first (used to split long videos into segments)
     max_width: int = 640
     model_path: str = DEFAULT_MODEL_PATH
 
@@ -92,9 +94,11 @@ class EngineConfig:
     min_face_px: float = 40.0           # inter-ocular distance in original pixels
     max_median_motion: float = 0.05     # landmark shift / inter-ocular distance per frame
     max_fast_motion_frac: float = 0.30  # share of frames with motion > 0.10
-    min_snr_db: float = -1.0
+    min_snr_db: float = 1.0            # best-region SNR needed for any verdict (pure noise reaches ~+0.4 dB)
+    min_snr_flag_db: float = 2.0       # best-region SNR needed before region disagreement counts as evidence
     max_bg_ratio: float = 0.5
     max_bg_corr: float = 0.6
+    min_bg_amp_ratio: float = 0.5       # background must fluctuate at least half as strongly as the face
 
     # decision (tau is replaced by tools/calibrate.py output when available)
     threshold: float = 55.0
@@ -103,6 +107,9 @@ class EngineConfig:
     max_lag_ms: float = 150.0
     hr_jump_bpm: float = 15.0
     hr_jump_penalty: float = 5.0
+    grey_margin: float = 20.0           # "Possible manipulation" only if coherence < threshold - grey_margin (55 - 20 = 35 %).
+                                        # Interim: a real phone clip scored 43-49 % (10-30 fps); synthetic fakes score up to
+                                        # ~32 %. 35 % sits in that gap, nearer the fakes. Replace via labelled-clip calibration.
 
 
 @dataclass
@@ -126,8 +133,12 @@ class AnalysisResult:
     pairs: dict = field(default_factory=dict)
     overlay_frame: Optional[np.ndarray] = None
 
-    def to_dict(self, max_points: int = 600) -> dict:
-        """JSON-ready dict: downsampled waves, PSD limited to 30-240 bpm, overlay as base64 JPEG."""
+    def to_dict(self, max_points: int = 600, compact: bool = False) -> dict:
+        """JSON-ready dict: downsampled waves, PSD limited to 30-240 bpm, overlay as base64 JPEG.
+        compact=True drops waves, spectra and the overlay (used by the evaluation page)."""
+        if compact:
+            return {k: v for k, v in self.to_dict(max_points=2).items()
+                    if k not in ("t", "signals", "psd", "overlay_jpeg_b64")}
         n = len(self.t)
         idx = np.unique(np.linspace(0, n - 1, min(n, max_points)).astype(int)) if n else np.zeros(0, int)
         sig = {k: _round_list(np.asarray(v)[idx]) for k, v in self.signals.items()} if n else {k: [] for k in ROI_NAMES}
@@ -269,6 +280,19 @@ def bandpass(x: np.ndarray, fs: float, band=(0.7, 3.0), order: int = 5) -> np.nd
     x = signal.sosfiltfilt(sos, x, padlen=padlen)
     sd = x.std()
     return (x - x.mean()) / sd if sd > 1e-12 else np.zeros_like(x)
+
+
+def band_amplitude(x: np.ndarray, fs: float, band=(0.7, 3.0), order: int = 5) -> float:
+    """Std of the in-band fluctuation relative to the mean level (not z-normalised)."""
+    x = np.asarray(x, dtype=float)
+    m = np.mean(x)
+    if len(x) < 8 or not np.all(np.isfinite(x)) or m <= 1e-6:
+        return 0.0
+    y = signal.detrend(x / m, type="linear")
+    lo, hi = effective_band(fs, band)
+    sos = signal.butter(order, [lo, hi], btype="bandpass", fs=fs, output="sos")
+    y = signal.sosfiltfilt(sos, y, padlen=min(3 * (2 * len(sos) + 1), len(y) - 1))
+    return float(y.std())
 
 
 # --------------------------------------------------------------------------
@@ -436,14 +460,24 @@ def analyze_traces(
     k_best = int(np.argmin(np.abs(f - f_best))) if math.isfinite(f_best) else 0
     bg_ratio = float(pn_bg[k_best] / pn_best[k_best]) if has_bg and pn_best[k_best] > 0 else 0.0
     bg_corr = float(abs(np.corrcoef(sig[best], bg)[0, 1])) if has_bg and bg.std() > 0 and sig[best].std() > 0 else 0.0
+    # Shapes alone are not enough: a near-static wall has tiny noise whose normalised spectrum can
+    # look "peaky". The background can only explain the face signal if it fluctuates comparably
+    # strongly (relative green-channel amplitude inside the pulse band).
+    if has_bg:
+        bg_amp = band_amplitude(np.asarray(rgb["background"], dtype=float)[:n, 1], fps, band, cfg.filter_order)
+        face_amp = band_amplitude(raw[best][:, 1], fps, band, cfg.filter_order)
+        bg_amp_ratio = bg_amp / face_amp if face_amp > 0 else 0.0
+    else:
+        bg_amp_ratio = 0.0
     q["snr_db"] = snr
     q["bg_ratio"] = bg_ratio
     q["bg_corr"] = bg_corr
+    q["bg_amp_ratio"] = bg_amp_ratio
 
     if not math.isfinite(snr) or snr < cfg.min_snr_db:
         gate_reasons.append(_reason("low_snr", "block",
             "The pulse signal is too weak compared with the noise. This is typical of heavily compressed, forwarded, very dark or blurry videos."))
-    if has_bg and (bg_ratio > cfg.max_bg_ratio or bg_corr > cfg.max_bg_corr):
+    if has_bg and bg_amp_ratio >= cfg.min_bg_amp_ratio and (bg_ratio > cfg.max_bg_ratio or bg_corr > cfg.max_bg_corr):
         gate_reasons.append(_reason("ambient", "block",
             "Lighting flicker or compression noise in the background looks like a pulse, so the face signal cannot be separated reliably."))
 
@@ -513,15 +547,32 @@ def analyze_traces(
                               reasons=gate_reasons + [_caveat()], **common)
 
     # Stage 7: verdict
-    is_real = scs >= cfg.threshold and frac_coherent >= cfg.min_frac_coherent
-    key = "real" if is_real else "manip"
-    margin = abs(scs - cfg.threshold)
-    confidence = "High" if margin >= 20 else ("Medium" if margin >= 10 else "Low")
-    if key == "real":
+    # Grey zone: "Possible manipulation" needs clear evidence (score more than grey_margin below tau).
+    # A borderline score is reported as "No strong signs detected" with low confidence, never as an accusation.
+    clearly_real = scs >= cfg.threshold and frac_coherent >= cfg.min_frac_coherent
+    clearly_manip = scs < cfg.threshold - cfg.grey_margin
+    if clearly_manip and snr < cfg.min_snr_flag_db:
+        # With a pulse this weak, regions disagree because of noise alone: not evidence of manipulation.
+        reasons = [_reason("weak_for_flag", "block",
+            f"The regions disagree (coherence {scs:.0f}%), but the pulse is too weak (signal quality {snr:.1f} dB, "
+            f"needs {cfg.min_snr_flag_db:g} dB) to tell manipulation apart from camera noise. A brighter, steadier, "
+            "longer clip is needed."), _caveat()]
+        return AnalysisResult(verdict=VERDICTS["unable"], verdict_key="unable", risk_level="—", confidence="—",
+                              bpm=bpm, coherence_score=scs, snr_db=snr, reasons=reasons, **common)
+    if clearly_manip:
+        key, mode = "manip", "manip"
+        margin = (cfg.threshold - cfg.grey_margin) - scs      # distance below the flag line
+        confidence = "High" if margin >= 15 else "Medium"
+        risk = "High" if confidence == "High" else "Medium"
+    elif clearly_real:
+        key, mode = "real", "real"
+        margin = scs - cfg.threshold
+        confidence = "High" if margin >= 20 else ("Medium" if margin >= 10 else "Low")
         risk = "Medium" if confidence == "Low" else "Low"
     else:
-        risk = "High" if confidence == "High" else "Medium"
-    reasons = explain(key, scs, bpm, pairs, windows, max_jump, frac_coherent, cfg, confidence)
+        key, mode = "real", "borderline"
+        confidence, risk = "Low", "Medium"
+    reasons = explain(mode, scs, bpm, pairs, windows, max_jump, frac_coherent, cfg, confidence)
     return AnalysisResult(verdict=VERDICTS[key], verdict_key=key, risk_level=risk, confidence=confidence,
                           bpm=bpm, coherence_score=scs, snr_db=snr, reasons=reasons, **common)
 
@@ -542,46 +593,64 @@ def _unable(reasons, q, fps, method, cfg, overlay) -> AnalysisResult:
                           quality=q, fps=fps, method=method, threshold=cfg.threshold, overlay_frame=overlay)
 
 
-def explain(key, scs, bpm, pairs, windows, max_jump, frac_coherent, cfg, confidence) -> list:
-    """Plain-language reasons. Each rule fires independently."""
+def _weak_spots(scs, pairs, windows, frac_coherent, cfg) -> list:
+    """(code, text) for each specific way the regions disagree."""
     out = []
     lr, lm, rm = pairs["left-right"], pairs["left-forehead"], pairs["right-forehead"]
-    if key == "real":
+    if lr["r"] < 0.3:
+        out.append(("cheek_desync",
+            f"The left and right cheeks do not pulse together (correlation {lr['r']:.2f}). In a real face both "
+            "cheeks are fed by the same heartbeat."))
+    for (name, m) in (("left-forehead", lm), ("right-forehead", rm)):
+        a = name.split("-")[0]
+        if m["r"] < 0.3:
+            out.append((f"{a}_forehead_desync",
+                f"The {ROI_LABELS[a]} and the forehead pulse out of step (correlation {m['r']:.2f})."))
+    w_bad = [w for w in windows if math.isfinite(w["scs"]) and w["scs"] < cfg.threshold]
+    if w_bad:
+        diffs = [(abs(w["bpm_forehead"] - w["bpm_left"]), "left", w) for w in w_bad] +                 [(abs(w["bpm_forehead"] - w["bpm_right"]), "right", w) for w in w_bad]
+        diffs = [d for d in diffs if math.isfinite(d[0])]
+        if diffs:
+            d, side, w = max(diffs, key=lambda x: x[0])
+            if d > 10:
+                out.append(("bpm_mismatch",
+                    f"Around {w['t_start']:.0f}-{w['t_end']:.0f} s the forehead shows {w['bpm_forehead']:.0f} bpm but "
+                    f"the {ROI_LABELS[side]} shows {w[f'bpm_{side}']:.0f} bpm. A single heart cannot produce two different rates."))
+    lags = [(m["lag_ms"], name) for name, m in pairs.items() if math.isfinite(m["lag_ms"])]
+    if lags:
+        worst = max(lags, key=lambda x: x[0])
+        if worst[0] > cfg.max_lag_ms:
+            a, b = worst[1].split("-")
+            out.append(("phase_lag",
+                f"The {ROI_LABELS[a]} and the {ROI_LABELS[b]} are offset by about {worst[0]:.0f} ms, far more than "
+                "natural blood-flow delays across a face."))
+    return out
+
+
+def explain(mode, scs, bpm, pairs, windows, max_jump, frac_coherent, cfg, confidence) -> list:
+    """Plain-language reasons. mode = "real" | "borderline" | "manip"."""
+    out = []
+    if mode == "real":
         out.append(_reason("coherent", "info",
             f"All three skin regions rise and fall together at about {bpm:.0f} bpm (spatial coherence {scs:.0f}%)."))
         if confidence == "Low":
             out.append(_reason("borderline", "warn",
                 "The score is close to the decision threshold. Please treat this result with extra caution."))
+    elif mode == "borderline":
+        out.append(_reason("borderline", "warn",
+            f"Spatial coherence is {scs:.0f}%, close to the {cfg.threshold:.0f}% threshold "
+            f"({frac_coherent * 100:.0f}% of time windows looked coherent). That is not strong evidence either way, "
+            "so SatyaSpandan does not flag this video. Treat it with ordinary caution."))
+        for code, text in _weak_spots(scs, pairs, windows, frac_coherent, cfg):
+            out.append(_reason(code, "info", "Weak spot: " + text))
     else:
-        if lr["r"] < 0.3:
-            out.append(_reason("cheek_desync", "warn",
-                f"The left and right cheeks do not pulse together (correlation {lr['r']:.2f}). In a real face both "
-                "cheeks are fed by the same heartbeat."))
-        for (name, m) in (("left-forehead", lm), ("right-forehead", rm)):
-            a = name.split("-")[0]
-            if m["r"] < 0.3:
-                out.append(_reason(f"{a}_forehead_desync", "warn",
-                    f"The {ROI_LABELS[a]} and the forehead pulse out of step (correlation {m['r']:.2f})."))
-        w_bad = [w for w in windows if w["scs"] < cfg.threshold]
-        if w_bad:
-            diffs = [(abs(w["bpm_forehead"] - w["bpm_left"]), "left", w) for w in w_bad] + \
-                    [(abs(w["bpm_forehead"] - w["bpm_right"]), "right", w) for w in w_bad]
-            d, side, w = max(diffs, key=lambda x: x[0])
-            if d > 10:
-                out.append(_reason("bpm_mismatch", "warn",
-                    f"Around {w['t_start']:.0f}-{w['t_end']:.0f} s the forehead shows {w['bpm_forehead']:.0f} bpm but "
-                    f"the {ROI_LABELS[side]} shows {w[f'bpm_{side}']:.0f} bpm. A single heart cannot produce two different rates."))
-        worst_lag = max(((m["lag_ms"], name) for name, m in pairs.items()), key=lambda x: x[0])
-        if worst_lag[0] > cfg.max_lag_ms:
-            a, b = worst_lag[1].split("-")
-            out.append(_reason("phase_lag", "warn",
-                f"The {ROI_LABELS[a]} and the {ROI_LABELS[b]} are offset by about {worst_lag[0]:.0f} ms, far more than "
-                "natural blood-flow delays across a face."))
+        for code, text in _weak_spots(scs, pairs, windows, frac_coherent, cfg):
+            out.append(_reason(code, "warn", text))
         out.append(_reason("low_coherence", "warn",
-            f"Overall spatial coherence is {scs:.0f}%, below the {cfg.threshold:.0f}% threshold; only "
+            f"Overall spatial coherence is {scs:.0f}%, clearly below the {cfg.threshold:.0f}% threshold; only "
             f"{frac_coherent * 100:.0f}% of time windows looked coherent."))
     if max_jump > cfg.hr_jump_bpm:
-        out.append(_reason("hr_jump", "warn",
+        out.append(_reason("hr_jump", "warn" if mode == "manip" else "info",
             f"The estimated heart rate jumps by {max_jump:.0f} bpm between neighbouring 2-second steps, which is physiologically unlikely."))
     out.append(_caveat())
     return out
@@ -619,23 +688,66 @@ def _skin_mean(rgb_frame: np.ndarray, ycrcb: np.ndarray, hull: np.ndarray) -> np
     return crop[use].mean(axis=0)
 
 
-def _background_boxes(face_box, w, h) -> list:
-    """Two square background patches away from the face (Seibold et al. 2025)."""
-    s = int(0.12 * w)
-    m = int(0.03 * w)
+def _background_boxes(face_box, gray: np.ndarray) -> tuple:
+    """
+    Two square background patches for the ambient-noise reference (Seibold et al. 2025).
+
+    Candidates on a grid are kept away from the face and from the body below it, then scored
+    by texture (mean gradient) and by blown-out / black pixels. The two plainest patches win,
+    preferably one on each side of the face. A patch on an edge or pattern would turn tiny
+    camera shake into a large "background fluctuation" and wrongly trigger the ambient gate.
+    Returns (boxes, texture_score_of_chosen_boxes).
+    """
+    import cv2
+    h, w = gray.shape[:2]
+    s = max(24, int(0.10 * min(w, h)))
+    m = max(4, int(0.02 * min(w, h)))
     fx0, fy0, fx1, fy1 = face_box
-    pad_x, pad_y = 0.15 * (fx1 - fx0), 0.15 * (fy1 - fy0)
-    fx0, fy0, fx1, fy1 = fx0 - pad_x, fy0 - pad_y, fx1 + pad_x, fy1 + pad_y
-    candidates = [(m, m), (w - m - s, m), (m, h - m - s), (w - m - s, h - m - s),
-                  (m, (h - s) // 2), (w - m - s, (h - s) // 2)]
-    boxes = []
-    for x, y in candidates:
-        overlaps = not (x + s < fx0 or x > fx1 or y + s < fy0 or y > fy1)
-        if not overlaps:
-            boxes.append((x, y, x + s, y + s))
-        if len(boxes) == 2:
-            break
-    return boxes
+    fw, fh = fx1 - fx0, fy1 - fy0
+    face_ex = (fx0 - 0.25 * fw, fy0 - 0.25 * fh, fx1 + 0.25 * fw, fy1 + 0.25 * fh)
+    neck_ex = (fx0 - 0.40 * fw, fy0, fx1 + 0.40 * fw, h)          # neck and upper chest
+    body_ex = (fx0 - 1.30 * fw, fy1, fx1 + 1.30 * fw, h)          # shoulders and arms (~3.6 face widths)
+    cx = (fx0 + fx1) / 2
+
+    def hits(x, y, r):
+        return not (x + s < r[0] or x > r[2] or y + s < r[1] or y > r[3])
+
+    g = gray.astype(np.float32)
+    grad = np.abs(cv2.Sobel(g, cv2.CV_32F, 1, 0, ksize=3)) + np.abs(cv2.Sobel(g, cv2.CV_32F, 0, 1, ksize=3))
+    clipped = ((gray >= 250) | (gray <= 5)).astype(np.float32)
+    cands = []
+    step = max(8, s // 2)
+    for y in range(m, h - s - m + 1, step):
+        for x in range(m, w - s - m + 1, step):
+            if hits(x, y, face_ex) or hits(x, y, neck_ex) or hits(x, y, body_ex):
+                continue
+            # score a padded area so the box also keeps a safety distance from edges (camera shake)
+            p = s // 2
+            ya, yb, xa, xb = max(0, y - p), min(h, y + s + p), max(0, x - p), min(w, x + s + p)
+            tex = float(grad[ya:yb, xa:xb].mean())
+            sat = float(clipped[ya:yb, xa:xb].mean())
+            cands.append((tex + 100.0 * sat, x, y))
+    if not cands:
+        return [], float("nan")
+    cands.sort()
+    best = cands[0]
+    first = (best[1], best[2])
+    side = best[1] + s / 2 < cx
+
+    def overlaps(c):
+        return not (c[1] + s <= first[0] or c[1] >= first[0] + s or c[2] + s <= first[1] or c[2] >= first[1] + s)
+
+    rest = [c for c in cands[1:] if not overlaps(c)]
+    other_side = [c for c in rest if (c[1] + s / 2 < cx) != side]
+    if other_side and other_side[0][0] <= max(2 * best[0], best[0] + 2):
+        second = other_side[0]
+    elif rest:
+        second = rest[0]
+    else:
+        second = None
+    chosen = [best] + ([second] if second else [])
+    boxes = [(c[1], c[2], c[1] + s, c[2] + s) for c in chosen]
+    return boxes, float(np.mean([c[0] for c in chosen]))
 
 
 def extract_traces(path: str, cfg: EngineConfig = EngineConfig(), progress: ProgressFn = None) -> dict:
@@ -656,6 +768,9 @@ def extract_traces(path: str, cfg: EngineConfig = EngineConfig(), progress: Prog
     n_total = int(cap.get(cv2.CAP_PROP_FRAME_COUNT) or 0)
     fps_ok = bool(fps) and math.isfinite(fps) and 10 <= fps <= 120
     max_frames = int(cfg.max_duration_s * (fps if fps_ok else 30))
+    if cfg.start_s > 0:
+        cap.set(cv2.CAP_PROP_POS_MSEC, cfg.start_s * 1000.0)
+        n_total = max(0, n_total - int(cfg.start_s * (fps if fps_ok else 30)))
     n_expected = min(n_total, max_frames) if n_total > 0 else max_frames
 
     with open(cfg.model_path, "rb") as fh:
@@ -673,6 +788,7 @@ def extract_traces(path: str, cfg: EngineConfig = EngineConfig(), progress: Prog
     stamps, found, iod, motion = [], [], [], []
     prev_pts = None
     bg_boxes = None
+    bg_texture = float("nan")
     overlay_candidates = []
     scale = 1.0
     last_ts = -1
@@ -704,7 +820,7 @@ def extract_traces(path: str, cfg: EngineConfig = EngineConfig(), progress: Prog
                 if bg_boxes is None:
                     x0, y0 = pts.min(axis=0)
                     x1, y1 = pts.max(axis=0)
-                    bg_boxes = _background_boxes((x0, y0, x1, y1), w, h)
+                    bg_boxes, bg_texture = _background_boxes((x0, y0, x1, y1), cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY))
                 found.append(True)
                 iod.append(d_eye / scale)
                 motion.append(np.median(np.linalg.norm(pts - prev_pts, axis=1)) / d_eye
@@ -770,6 +886,7 @@ def extract_traces(path: str, cfg: EngineConfig = EngineConfig(), progress: Prog
         "motion": float(np.median(motion_arr)) if motion_arr.size else 0.0,
         "fast_motion_frac": float(np.mean(motion_arr > 0.10)) if motion_arr.size else 0.0,
         "frames_read": int(n),
+        "bg_texture": bg_texture,
     }
     if bg_boxes is None:
         arr["background"] = None
@@ -844,15 +961,32 @@ def analyze_video(path: str, cfg: EngineConfig = EngineConfig(), progress: Progr
     return result
 
 
-def load_calibrated_config(path: Optional[str] = None, **overrides) -> EngineConfig:
-    """EngineConfig with the threshold from tools/calibrate.py (calibration.json) if present."""
+CALIBRATION_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "calibration.json")
+
+# Thresholds that a calibration file (tools/calibrate.py or the /evaluate page) may set.
+CALIBRATABLE = ("threshold", "grey_margin", "min_frac_coherent", "min_snr_db", "min_snr_flag_db", "max_bg_ratio", "max_bg_corr", "min_bg_amp_ratio",
+                "min_duration_s", "min_face_ratio", "min_face_px", "max_median_motion", "max_fast_motion_frac")
+
+
+def load_calibration(path: Optional[str] = None) -> dict:
     import json
-    path = path or os.path.join(os.path.dirname(os.path.abspath(__file__)), "calibration.json")
-    cfg = EngineConfig(**overrides)
-    if os.path.exists(path):
+    path = path or CALIBRATION_PATH
+    if not os.path.exists(path):
+        return {}
+    try:
         with open(path, encoding="utf-8") as fh:
             cal = json.load(fh)
-        cfg.threshold = float(cal.get("threshold", cfg.threshold))
+    except (OSError, ValueError):
+        return {}
+    return {k: float(v) for k, v in cal.items() if k in CALIBRATABLE and isinstance(v, (int, float))}
+
+
+def load_calibrated_config(path: Optional[str] = None, **overrides) -> EngineConfig:
+    """EngineConfig with thresholds from calibration.json (if present); explicit overrides win."""
+    cfg = EngineConfig(**overrides)
+    for k, v in load_calibration(path).items():
+        if k not in overrides:
+            setattr(cfg, k, v)
     return cfg
 
 
@@ -862,7 +996,7 @@ if __name__ == "__main__":
 
     ap = argparse.ArgumentParser(description="Analyse one video with SatyaSpandan")
     ap.add_argument("video")
-    ap.add_argument("--method", default="POS", choices=["POS", "CHROM", "GREEN"])
+    ap.add_argument("--method", default="POS", choices=["POS", "GREEN", "CHROM"])
     args = ap.parse_args()
     res = analyze_video(args.video, load_calibrated_config(method=args.method),
                         progress=lambda f, s: print(f"\r{s:<20} {f * 100:5.1f}%", end="", flush=True))

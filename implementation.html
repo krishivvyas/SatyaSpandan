@@ -280,7 +280,7 @@ npm run dev                                   # http://localhost:3000
 <h3 id="61-public-api">6.1 Public API</h3>
 <pre><code class="language-python">@dataclass
 class EngineConfig:
-    method: str = &quot;POS&quot;            # &quot;GREEN&quot; | &quot;CHROM&quot; | &quot;POS&quot;
+    method: str = &quot;POS&quot;            # &quot;POS&quot; (default) | &quot;GREEN&quot; | &quot;CHROM&quot;
     band_hz: tuple = (0.7, 3.0)    # 42–180 bpm (Seibold 2025)
     filter_order: int = 5
     window_s: float = 10.0         # Seibold: best HR stability at 10 s
@@ -490,14 +490,14 @@ SCS_w = 100 · (0.4·r̄ + 0.4·MSC̄ + 0.2·agree)
 </tr>
 <tr>
 <td>Ambient dominance</td>
-<td>on the best region: bg_ratio &gt; 0.5 or ROI–bg corr &gt; 0.6</td>
+<td>on the best region: (bg_ratio &gt; 0.5 or ROI–bg corr &gt; 0.6) <strong>and</strong> the background's in-band relative amplitude ≥ 0.5 × the face's</td>
 <td>"Lighting flicker or compression noise looks like a pulse, so no reliable reading is possible."</td>
 </tr>
 </tbody>
 </table></div>
 <p><strong>B. Verdict</strong> (only if the gate passes):
-- <code>SCS ≥ τ</code> <strong>and</strong> <code>frac_coherent ≥ 0.6</code> → 🟢 <strong>"No strong signs detected"</strong>
-- otherwise → 🟡 <strong>"Possible manipulation detected"</strong></p>
+- <code>SCS &lt; τ − grey_margin</code> (default 20, i.e. below 35 %) → 🟡 <strong>"Possible manipulation detected"</strong>
+- otherwise → 🟢 <strong>"No strong signs detected"</strong>. Scores in the grey zone, or above τ with <code>frac_coherent &lt; 0.6</code>, get Low confidence, Medium risk and a "borderline" explanation that lists the weak spots.</p>
 <p>Starting value τ = 55. <strong>It is replaced by the calibrated value from <code>tools/calibrate.py</code></strong> (§10).</p>
 <p><strong>C. Risk level</strong> (shown next to the badge, never as a "fake probability"):
 - <code>|SCS − τ| ≥ 20</code> → High confidence in the direction of the verdict
@@ -982,6 +982,66 @@ export default nextConfig;
 <td>±0.1 Hz</td>
 <td>±max(0.1 Hz, 1/duration)</td>
 <td>A clean 4–6 s clip read about −3 dB, because the spectral peak is wider on short clips.</td>
+</tr>
+<tr>
+<td>Ambient amplitude</td>
+<td>—</td>
+<td>The background must fluctuate at least half as strongly as the face before it can count as ambient</td>
+<td>A real phone selfie against a plain white wall was blocked: the wall's tiny compression noise looks "peaky" once normalised. Synthetic separation: real 0.13 vs flicker 0.99.</td>
+</tr>
+<tr>
+<td>Cheek ROIs</td>
+<td>11 landmarks each (under-eye strip)</td>
+<td>15 landmarks each, from below the eye to nostril level, about 3× the area</td>
+<td>On real phone video the small strips gave a weak, noisy pulse, which hurt both the quality gate and coherence.</td>
+</tr>
+<tr>
+<td>Accuracy page</td>
+<td>Offline <code>tools/calibrate.py</code> only</td>
+<td><code>/evaluate</code> page plus API <code>POST /api/evaluate</code> (one face tracking, all 3 methods), <code>GET/POST/DELETE /api/calibration</code>. Client re-scoring mirrors the engine gate and decision; calibration can set every threshold.</td>
+<td>The team needs to measure and tune on its own real clips, with no command line.</td>
+</tr>
+<tr>
+<td>Window schema</td>
+<td>Strict floats</td>
+<td>Nullable</td>
+<td>A NaN in one window would have turned a whole result into a bare HTTP 500.</td>
+</tr>
+<tr>
+<td>Grey zone</td>
+<td>Flag whenever SCS &lt; τ</td>
+<td>Flag only if SCS &lt; τ − <code>grey_margin</code>: first 10, now <strong>20</strong> (flag line 35 %); borderline → "No strong signs", low confidence. Manipulation confidence is measured from the flag line.</td>
+<td>A real phone video scored just under τ and was flagged "Possible manipulation" (Medium risk, Low confidence). A borderline score is not evidence, and accusing on it breaks the project's own rule. Widened after a real 30 fps clip, resampled to 10–30 fps, scored 43–49 % and was flagged at 15 fps (43 % &lt; 45 %). A 30 % line let synthetic out-of-sync fakes (up to 31.8 %) through, so 35 % sits in the gap between fakes (≤ 32 %) and that real clip (≥ 43 %). Interim until labelled-clip calibration.</td>
+</tr>
+<tr>
+<td>Background boxes</td>
+<td>Fixed corners, only avoiding the face</td>
+<td>Grid search for the two plainest squares (lowest edge texture, fewest blown-out or black pixels, scored with a safety margin), away from the face, neck, shoulders and arms, preferably one per side. Texture is reported as <code>bg_texture</code>.</td>
+<td>A WhatsApp clip's box sat on a sharp ceiling edge, so camera shake looked like ambient flicker. A test also showed corner boxes landing on clothing, which moves with breathing.</td>
+</tr>
+<tr>
+<td>Signal gate</td>
+<td>Best region ≥ −1 dB</td>
+<td><strong>Two tiers:</strong> any verdict needs best region ≥ +1 dB; a "Possible manipulation" flag needs ≥ +2 dB (<code>min_snr_flag_db</code>), else "Unable to assess" (<code>weak_for_flag</code>). Tests now allow zero wrong verdicts, with up to 10 % (POS) or 20 % (CHROM/GREEN) safe refusals.</td>
+<td>Pure noise reaches +0.4 dB in the best of 3 regions (p99 −0.4 to −0.7 dB), so −1 dB was inside the noise. GREEN flagged a pulse-free 20 fps phone clip (left cheek +0.8 dB by chance).</td>
+</tr>
+<tr>
+<td>Field finding</td>
+<td>—</td>
+<td>Five team phone clips: every <strong>30 fps</strong> clip carried a pulse (3–6 dB; GREEN coherence 77–80 %), even 1.4–1.9 Mbit/s WhatsApp ones, but most were under 6 s. Both <strong>20 fps</strong> clips (the phone's low-light mode) had none.</td>
+<td>Recording guidance: bright, even light so the phone stays at 30 fps; 15–20 s; phone held still.</td>
+</tr>
+<tr>
+<td>Default method</td>
+<td>POS</td>
+<td>Briefly switched to GREEN, then <strong>back to POS</strong> at the team's request (still POS everywhere)</td>
+<td>In the synthetic noise sweep, GREEN still passed 90 % of real faces at 4× noise vs about 30 % for POS, and held up better on darker synthetic skin. On the team's 30 fps phone clips, GREEN gave 77–80 % coherence vs 43–52 % for POS. To be re-checked on a proper labelled set via <code>/evaluate</code>.</td>
+</tr>
+<tr>
+<td>Technical details panel</td>
+<td>—</td>
+<td>Results page lists every quality-gate value next to its limit</td>
+<td>Shows which check caused an "Unable to assess"</td>
 </tr>
 <tr>
 <td>Unable verdict UI</td>

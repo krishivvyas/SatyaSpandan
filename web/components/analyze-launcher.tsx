@@ -53,9 +53,9 @@ export function AnalyzeLauncher() {
             onChange={(e) => setMethod(e.target.value as Method)}
             className="rounded-lg border border-border bg-bg px-2 py-1.5"
           >
-            <option value="POS">POS</option>
-            <option value="CHROM">CHROM</option>
+            <option value="POS">POS (default)</option>
             <option value="GREEN">GREEN</option>
+            <option value="CHROM">CHROM</option>
           </select>
           <span className="text-muted">{METHOD_HELP[method]}</span>
         </div>

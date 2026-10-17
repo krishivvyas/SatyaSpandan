@@ -51,13 +51,13 @@ export function PulseWaveChart({ result }: { result: AnalysisResult }) {
     const step = w.length > 1 ? w[1].t_start - w[0].t_start : w[0].t_end - w[0].t_start;
     const last = w.length - 1;
     return w
-      .map((x, i) => {
+      .map((x, i): [number, number, number | null] => {
         if (w.length === 1) return [x.t_start, x.t_end, x.scs];
         const mid = (x.t_start + x.t_end) / 2;
         // the first and last windows also own the clip edges they alone cover
         return [i === 0 ? x.t_start : mid - step / 2, i === last ? x.t_end : mid + step / 2, x.scs];
       })
-      .filter(([, , scs]) => scs < result.threshold);
+      .filter(([, , scs]) => scs != null && scs < result.threshold);
   }, [result]);
 
   if (data.length === 0) return <Empty text="Not enough usable video to draw the pulse waves." />;
@@ -168,9 +168,9 @@ export function SpectrumChart({ result }: { result: AnalysisResult }) {
 export function CoherenceTimeline({ result }: { result: AnalysisResult }) {
   const data = result.windows.map((w) => ({
     label: `${w.t_start.toFixed(0)}–${w.t_end.toFixed(0)}s`,
-    scs: Math.round(w.scs * 10) / 10,
+    scs: w.scs == null ? 0 : Math.round(w.scs * 10) / 10,
     bpm: w.bpm,
-    pass: w.scs >= result.threshold,
+    pass: w.scs != null && w.scs >= result.threshold,
   }));
   if (data.length === 0) return <Empty text="No analysis windows for this clip." />;
   return (

@@ -14,6 +14,7 @@ import { LimitationsPanel } from "./limitations-panel";
 import { MetricCards } from "./metric-cards";
 import { ReasonsList } from "./reasons-list";
 import { RoiOverlay } from "./roi-overlay";
+import { TechnicalDetails } from "./technical-details";
 import { VerdictBadge } from "./verdict-badge";
 
 const STAGES = ["Reading video", "Tracking face", "Extracting pulse", "Comparing regions"];
@@ -101,6 +102,7 @@ function Results({ result }: { result: AnalysisResult }) {
           {tab === "time" && <CoherenceTimeline result={result} />}
         </div>
       </section>
+      <TechnicalDetails result={result} />
       <LimitationsPanel />
       <div className="flex justify-center pt-2">
         <Link href="/" className="btn-primary">

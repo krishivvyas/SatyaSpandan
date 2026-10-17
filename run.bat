@@ -8,6 +8,8 @@ rem  SatyaSpandan launcher
 rem    run.bat          start API + website (dev mode) and open browser
 rem    run.bat prod     build the website and run the production server (use for the live demo)
 rem    run.bat test     run the synthetic test suite only
+rem    run.bat report [folder]
+rem                     write accuracy_report.html and open it; optional folder with real\ and fake\ clips
 rem ---------------------------------------------------------------
 
 set "MODE=%~1"
@@ -49,6 +51,7 @@ if not exist "%MODEL%" (
 
 rem ---- Test mode ----------------------------------------------------
 if /i "%MODE%"=="test" goto :test
+if /i "%MODE%"=="report" goto :report
 
 rem ---- 3. Node.js and website packages ------------------------------
 where node >nul 2>&1
@@ -128,6 +131,21 @@ pushd backend
 set "RC=%ERRORLEVEL%"
 popd
 pause
+exit /b %RC%
+
+:report
+set "VIDEOS=%~f2"
+pushd backend
+if defined VIDEOS (
+    echo [report] Synthetic tests + clips in "%VIDEOS%" ...
+    "%PY%" tools\accuracy_report.py --videos "%VIDEOS%"
+) else (
+    echo [report] Synthetic tests only. Add a folder with real\ and fake\ clips to include real videos.
+    "%PY%" tools\accuracy_report.py
+)
+set "RC=%ERRORLEVEL%"
+popd
+if "%RC%"=="0" start "" "%~dp0accuracy_report.html"
 exit /b %RC%
 
 :fail

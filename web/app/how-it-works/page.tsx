@@ -5,11 +5,11 @@ export const metadata: Metadata = { title: "How it works · SatyaSpandan" };
 const STAGES = [
   ["1. Read the video", "OpenCV reads each frame and the video's true frame rate. Every heart-rate number depends on it."],
   ["2. Track the face", "MediaPipe Face Landmarker places 478 points on the face. From them we outline the forehead, the left cheek and the right cheek, plus two background patches that measure lighting and compression noise."],
-  ["3. Extract the pulse", "For each region we average the red, green and blue values in every frame. The POS method (Wang et al., 2017) turns those three colour traces into one pulse signal that resists skin-tone and lighting changes. CHROM and GREEN are also available."],
+  ["3. Extract the pulse", "For each region we average the red, green and blue values in every frame. By default the POS method (Wang et al., 2017) turns those three colour traces into one pulse signal that resists skin-tone and lighting changes. The plain green channel (Verkruysse et al., 2008), where blood absorbs light most strongly, and CHROM (de Haan & Jeanne, 2013) are also available."],
   ["4. Clean the signal", "Slow drift is removed, then a 5th-order Butterworth band-pass filter keeps only 0.7–3.0 Hz (42–180 beats per minute), following Seibold et al. (2025). Zero-phase filtering keeps the timing between regions true."],
   ["5. Find the heartbeat", "A Fourier transform shows which frequencies are present. The background spectrum is subtracted from the face spectrum, and the strongest remaining peak is the heart rate. Signal quality (SNR) is the power at the heartbeat versus everything else."],
   ["6. Compare the regions", "In every 10-second window we measure how well each pair of regions agrees: correlation, spectral coherence at the heart rate, timing offset, and whether they show the same rate. These combine into the Spatial Coherence Score, following FakeCatcher (Ciftci et al., 2020)."],
-  ["7. Decide carefully", "If the face is missing, too small, moving too much, the clip is too short or the signal is too weak, the answer is “Unable to assess”. Otherwise a coherence score above the calibrated threshold gives “No strong signs detected”, and a score below it gives “Possible manipulation detected”."],
+  ["7. Decide carefully", "If the face is missing, too small, moving too much, the clip is too short or the signal is too weak, the answer is “Unable to assess”. Otherwise only a coherence score clearly below the calibrated threshold (below 35%, i.e. more than a 20-point grey zone under the 55% threshold) gives “Possible manipulation detected”. Everything else, including borderline scores, gives “No strong signs detected”, with low confidence when it is close."],
 ];
 
 const REFS = [

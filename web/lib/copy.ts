@@ -16,6 +16,9 @@ export const VERDICT_SUMMARY: Record<VerdictKey, string> = {
   unable: "The video does not carry a clear enough pulse signal for a fair judgement. We prefer to say so rather than guess.",
 };
 
+export const VERDICT_SUMMARY_BORDERLINE =
+  "The skin regions neither clearly pulse together nor clearly disagree. This borderline result is not evidence either way. A longer, steadier, well-lit clip will give a clearer answer.";
+
 export const DISCLAIMER =
   "Disclaimer: Automated AI forensics results are probabilistic warning signs and can be wrong. This output should not be treated as final proof and must never be used to definitively label a real person as a liar.";
 
@@ -63,7 +66,7 @@ export const ROI_META = {
 } as const;
 
 export const METHOD_HELP: Record<string, string> = {
-  POS: "POS (Wang 2017): robust to skin tone and lighting. Recommended.",
+  POS: "POS (Wang 2017): default. Designed to resist skin-tone and lighting changes; needs a well-lit clip.",
   CHROM: "CHROM (de Haan 2013): chrominance-based, good under white light.",
-  GREEN: "GREEN (Verkruysse 2008): simplest baseline, most sensitive to lighting.",
+  GREEN: "GREEN (Verkruysse 2008): green channel only. Held up better on noisy phone clips in our tests, but sensitive to changing light.",
 };

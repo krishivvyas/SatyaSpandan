@@ -16,13 +16,16 @@ import threading
 import time
 import uuid
 from concurrent.futures import ThreadPoolExecutor
-from typing import Literal
+from typing import Literal, Optional
 
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 
-from rppg_engine import DEFAULT_MODEL_PATH, analyze_traces, analyze_video, load_calibrated_config
-from schemas import AnalysisResult, JobCreated, JobStatus, Sample, Scenario
+from dataclasses import asdict
+
+from rppg_engine import (CALIBRATABLE, CALIBRATION_PATH, DEFAULT_MODEL_PATH, EngineConfig, analyze_traces,
+                         analyze_video, extract_traces, load_calibrated_config, load_calibration)
+from schemas import AnalysisResult, Calibration, JobCreated, JobStatus, Sample, Scenario
 from synthetic import SCENARIOS, make_scenario
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -36,7 +39,7 @@ app = FastAPI(title="SatyaSpandan API", version="1.0")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=os.environ.get("CORS_ORIGINS", "http://localhost:3000,http://127.0.0.1:3000").split(","),
-    allow_methods=["GET", "POST"],
+    allow_methods=["GET", "POST", "DELETE"],
     allow_headers=["*"],
 )
 
@@ -194,3 +197,106 @@ def synthetic(scenario: str, seed: int = 0, method: Literal["POS", "CHROM", "GRE
     out["source"] = {"type": "synthetic", "name": SCENARIOS[scenario]["title"],
                      "true_bpm": round(sc["true_bpm"], 1), "expected": sc["expected"]}
     return out
+
+
+# --------------------------------------------------------------------------
+# Accuracy testing (/evaluate page)
+# --------------------------------------------------------------------------
+
+EVAL_METHODS = ("POS", "GREEN", "CHROM")
+
+
+def _run_eval_job(job_id: str, path: str, meta: dict):
+    """Track the face once, then score the same traces with every pulse method."""
+    import base64
+
+    import cv2
+    try:
+        _update(job_id, status="running", stage="Reading video")
+        _check_duration(path)
+        data = extract_traces(path, EngineConfig(), progress=lambda f, s: _update(job_id, progress=0.9 * f, stage=s))
+        rgb = {k: v for k, v in data["rgb"].items() if v is not None}
+        methods = {}
+        for m in EVAL_METHODS:
+            _update(job_id, stage=f"Scoring with {m}")
+            res = analyze_traces(rgb, data["fps"], load_calibrated_config(method=m), quality=data["quality"])
+            methods[m] = res.to_dict(compact=True)
+        thumb = None
+        if data["overlay"] is not None:
+            img = data["overlay"]
+            img = cv2.resize(img, (240, int(img.shape[0] * 240 / img.shape[1])), interpolation=cv2.INTER_AREA)
+            ok, buf = cv2.imencode(".jpg", img, [cv2.IMWRITE_JPEG_QUALITY, 80])
+            thumb = base64.b64encode(buf.tobytes()).decode("ascii") if ok else None
+        _update(job_id, status="done", progress=1.0, stage="Done",
+                result={**meta, "methods": methods, "thumb_jpeg_b64": thumb})
+    except ValueError as e:
+        _update(job_id, status="error", stage="Error", error=str(e))
+    except Exception:
+        import traceback
+        traceback.print_exc()
+        _update(job_id, status="error", stage="Error", error="Analysis failed for this clip (see the API window for details).")
+    finally:
+        try:
+            os.remove(path)
+        except OSError:
+            pass
+
+
+@app.post("/api/evaluate", response_model=JobCreated, status_code=202)
+async def evaluate_upload(
+    file: UploadFile = File(...),
+    label: Literal["real", "fake", "unknown"] = Form("unknown"),
+    true_bpm: Optional[float] = Form(None),
+):
+    ext = os.path.splitext(file.filename or "")[1].lower()
+    if ext not in ALLOWED_EXT:
+        raise HTTPException(415, "Please upload a video file (MP4, MOV, WebM, AVI or MKV).")
+    fd, path = tempfile.mkstemp(suffix=ext, prefix="satya_eval_")
+    size = 0
+    try:
+        with os.fdopen(fd, "wb") as out:
+            while chunk := await file.read(1024 * 1024):
+                size += len(chunk)
+                if size > MAX_UPLOAD_BYTES:
+                    raise HTTPException(413, "The file is larger than 50 MB. Please trim or compress it.")
+                out.write(chunk)
+    except HTTPException:
+        os.remove(path)
+        raise
+    job_id = _new_job()
+    meta = {"name": file.filename, "label": label, "true_bpm": true_bpm}
+    _executor.submit(_run_eval_job, job_id, path, meta)
+    return {"job_id": job_id}
+
+
+@app.get("/api/evaluate/{job_id}")
+def evaluate_status(job_id: str):
+    with _lock:
+        job = _jobs.get(job_id)
+        if job is None:
+            raise HTTPException(404, "This evaluation job has expired or does not exist.")
+        return {"job_id": job_id, **{k: job[k] for k in ("status", "progress", "stage", "result", "error")}}
+
+
+@app.get("/api/calibration")
+def get_calibration():
+    defaults = asdict(EngineConfig())
+    return {"defaults": {k: defaults[k] for k in CALIBRATABLE}, "current": load_calibration()}
+
+
+@app.post("/api/calibration")
+def save_calibration(cal: Calibration):
+    import datetime
+    values = {k: v for k, v in cal.model_dump().items() if v is not None}
+    values["saved_at"] = datetime.datetime.now().isoformat(timespec="seconds")
+    values["source"] = "evaluate page"
+    with open(CALIBRATION_PATH, "w", encoding="utf-8") as fh:
+        json.dump(values, fh, indent=2)
+    return {"ok": True, "current": load_calibration()}
+
+
+@app.delete("/api/calibration")
+def reset_calibration():
+    if os.path.exists(CALIBRATION_PATH):
+        os.remove(CALIBRATION_PATH)
+    return {"ok": True, "current": {}}

@@ -14,15 +14,16 @@ class Reason(BaseModel):
 
 
 class Window(BaseModel):
-    t_start: float
-    t_end: float
-    scs: float
+    # Optional everywhere: real video can yield NaN (-> null); a strict float would turn that into a 500.
+    t_start: Optional[float]
+    t_end: Optional[float]
+    scs: Optional[float]
     bpm: Optional[float]
-    r_lr: float
-    r_lm: float
-    r_rm: float
-    msc: float
-    agree: float
+    r_lr: Optional[float]
+    r_lm: Optional[float]
+    r_rm: Optional[float]
+    msc: Optional[float]
+    agree: Optional[float]
     bpm_forehead: Optional[float]
     bpm_left: Optional[float]
     bpm_right: Optional[float]
@@ -48,6 +49,22 @@ class AnalysisResult(BaseModel):
     pairs: dict[str, dict[str, Optional[float]]]
     overlay_jpeg_b64: Optional[str]
     source: Optional[dict] = None
+
+
+class Calibration(BaseModel):
+    threshold: Optional[float] = None
+    grey_margin: Optional[float] = None
+    min_frac_coherent: Optional[float] = None
+    min_snr_db: Optional[float] = None
+    min_snr_flag_db: Optional[float] = None
+    max_bg_ratio: Optional[float] = None
+    max_bg_corr: Optional[float] = None
+    min_bg_amp_ratio: Optional[float] = None
+    min_duration_s: Optional[float] = None
+    min_face_ratio: Optional[float] = None
+    min_face_px: Optional[float] = None
+    max_median_motion: Optional[float] = None
+    max_fast_motion_frac: Optional[float] = None
 
 
 class JobCreated(BaseModel):

@@ -192,7 +192,7 @@ The design rule: **pure functions plus one orchestrator.** Every stage can be te
 ```python
 @dataclass
 class EngineConfig:
-    method: str = "POS"            # "GREEN" | "CHROM" | "POS"
+    method: str = "POS"            # "POS" (default) | "GREEN" | "CHROM"
     band_hz: tuple = (0.7, 3.0)    # 42–180 bpm (Seibold 2025)
     filter_order: int = 5
     window_s: float = 10.0         # Seibold: best HR stability at 10 s
@@ -347,11 +347,11 @@ The weights (0.4 / 0.4 / 0.2) are a transparent starting point. In §7.4 a logis
 | Face size | inter-ocular < 40 px | "The face is too small or far away for skin-colour analysis." |
 | Motion | median motion > 0.05 inter-ocular/frame, or > 30 % of frames above 0.10 | "There is too much head or camera movement." |
 | Signal quality | best single-region SNR < −1 dB (SNR band = ±max(0.1 Hz, 1/duration) around the 1st and 2nd harmonics) | "The pulse signal is too weak, which is typical of heavily compressed, forwarded or very dark videos." |
-| Ambient dominance | on the best region: bg_ratio > 0.5 or ROI–bg corr > 0.6 | "Lighting flicker or compression noise looks like a pulse, so no reliable reading is possible." |
+| Ambient dominance | on the best region: (bg_ratio > 0.5 or ROI–bg corr > 0.6) **and** the background's in-band relative amplitude ≥ 0.5 × the face's | "Lighting flicker or compression noise looks like a pulse, so no reliable reading is possible." |
 
 **B. Verdict** (only if the gate passes):
-- `SCS ≥ τ` **and** `frac_coherent ≥ 0.6` → 🟢 **"No strong signs detected"**
-- otherwise → 🟡 **"Possible manipulation detected"**
+- `SCS < τ − grey_margin` (default 20, i.e. below 35 %) → 🟡 **"Possible manipulation detected"**
+- otherwise → 🟢 **"No strong signs detected"**. Scores in the grey zone, or above τ with `frac_coherent < 0.6`, get Low confidence, Medium risk and a "borderline" explanation that lists the weak spots.
 
 Starting value τ = 55. **It is replaced by the calibrated value from `tools/calibrate.py`** (§10).
 
@@ -627,6 +627,16 @@ What changed from the plan while building, and why:
 | SNR gate | Pooled-skin SNR | **Best single-region SNR** | Averaging out-of-sync regions destroys the pooled pulse, so fakes were wrongly gated as "Unable to assess" (17/20 in the first test run). |
 | Ambient check | Pooled signal | Best region | Same reason: the pooled peak was diffuse for fakes, which inflated the background ratio. |
 | SNR band | ±0.1 Hz | ±max(0.1 Hz, 1/duration) | A clean 4–6 s clip read about −3 dB, because the spectral peak is wider on short clips. |
+| Ambient amplitude | — | The background must fluctuate at least half as strongly as the face before it can count as ambient | A real phone selfie against a plain white wall was blocked: the wall's tiny compression noise looks "peaky" once normalised. Synthetic separation: real 0.13 vs flicker 0.99. |
+| Cheek ROIs | 11 landmarks each (under-eye strip) | 15 landmarks each, from below the eye to nostril level, about 3× the area | On real phone video the small strips gave a weak, noisy pulse, which hurt both the quality gate and coherence. |
+| Accuracy page | Offline `tools/calibrate.py` only | `/evaluate` page plus API `POST /api/evaluate` (one face tracking, all 3 methods), `GET/POST/DELETE /api/calibration`. Client re-scoring mirrors the engine gate and decision; calibration can set every threshold. | The team needs to measure and tune on its own real clips, with no command line. |
+| Window schema | Strict floats | Nullable | A NaN in one window would have turned a whole result into a bare HTTP 500. |
+| Grey zone | Flag whenever SCS < τ | Flag only if SCS < τ − `grey_margin`: first 10, now **20** (flag line 35 %); borderline → "No strong signs", low confidence. Manipulation confidence is measured from the flag line. | A real phone video scored just under τ and was flagged "Possible manipulation" (Medium risk, Low confidence). A borderline score is not evidence, and accusing on it breaks the project's own rule. Widened after a real 30 fps clip, resampled to 10–30 fps, scored 43–49 % and was flagged at 15 fps (43 % < 45 %). A 30 % line let synthetic out-of-sync fakes (up to 31.8 %) through, so 35 % sits in the gap between fakes (≤ 32 %) and that real clip (≥ 43 %). Interim until labelled-clip calibration. |
+| Background boxes | Fixed corners, only avoiding the face | Grid search for the two plainest squares (lowest edge texture, fewest blown-out or black pixels, scored with a safety margin), away from the face, neck, shoulders and arms, preferably one per side. Texture is reported as `bg_texture`. | A WhatsApp clip's box sat on a sharp ceiling edge, so camera shake looked like ambient flicker. A test also showed corner boxes landing on clothing, which moves with breathing. |
+| Signal gate | Best region ≥ −1 dB | **Two tiers:** any verdict needs best region ≥ +1 dB; a "Possible manipulation" flag needs ≥ +2 dB (`min_snr_flag_db`), else "Unable to assess" (`weak_for_flag`). Tests now allow zero wrong verdicts, with up to 10 % (POS) or 20 % (CHROM/GREEN) safe refusals. | Pure noise reaches +0.4 dB in the best of 3 regions (p99 −0.4 to −0.7 dB), so −1 dB was inside the noise. GREEN flagged a pulse-free 20 fps phone clip (left cheek +0.8 dB by chance). |
+| Field finding | — | Five team phone clips: every **30 fps** clip carried a pulse (3–6 dB; GREEN coherence 77–80 %), even 1.4–1.9 Mbit/s WhatsApp ones, but most were under 6 s. Both **20 fps** clips (the phone's low-light mode) had none. | Recording guidance: bright, even light so the phone stays at 30 fps; 15–20 s; phone held still. |
+| Default method | POS | Briefly switched to GREEN, then **back to POS** at the team's request (still POS everywhere) | In the synthetic noise sweep, GREEN still passed 90 % of real faces at 4× noise vs about 30 % for POS, and held up better on darker synthetic skin. On the team's 30 fps phone clips, GREEN gave 77–80 % coherence vs 43–52 % for POS. To be re-checked on a proper labelled set via `/evaluate`. |
+| Technical details panel | — | Results page lists every quality-gate value next to its limit | Shows which check caused an "Unable to assess" |
 | Unable verdict UI | — | BPM and coherence shown as "—, not reliable for this clip"; no amber shading | Showing a number for an unusable clip would look like a finding. |
 | UI kit | shadcn/ui | Hand-written Tailwind components (`card`, `btn-primary`, tabs, `<details>` accordion, tooltip) | Fewer moving parts and no interactive CLI; same look. |
 | Next.js 16 | — | `cacheComponents` is on by default. Client components that read the URL (`usePathname`, `useParams`, `useSearchParams`) are wrapped in `<Suspense>`. | Otherwise the production build fails ("blocking-prerender-client-hook"). |

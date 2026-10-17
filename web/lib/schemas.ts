@@ -19,13 +19,13 @@ const num = z.number().nullable();
 export const Window = z.object({
   t_start: z.number(),
   t_end: z.number(),
-  scs: z.number(),
+  scs: num,
   bpm: num,
-  r_lr: z.number(),
-  r_lm: z.number(),
-  r_rm: z.number(),
-  msc: z.number(),
-  agree: z.number(),
+  r_lr: num,
+  r_lm: num,
+  r_rm: num,
+  msc: num,
+  agree: num,
   bpm_forehead: num,
   bpm_left: num,
   bpm_right: num,
@@ -84,3 +84,51 @@ export const Scenario = z.object({
   expected: VerdictKey,
 });
 export type Scenario = z.infer<typeof Scenario>;
+
+// ---- Accuracy testing (/evaluate) ----
+
+export const CompactResult = AnalysisResult.omit({ t: true, signals: true, psd: true, overlay_jpeg_b64: true });
+export type CompactResult = z.infer<typeof CompactResult>;
+
+export const Label = z.enum(["real", "fake", "unknown"]);
+export type Label = z.infer<typeof Label>;
+
+export const EvalResult = z.object({
+  name: z.string().nullable(),
+  label: Label,
+  true_bpm: z.number().nullable(),
+  methods: z.record(z.string(), CompactResult),
+  thumb_jpeg_b64: z.string().nullable(),
+});
+export type EvalResult = z.infer<typeof EvalResult>;
+
+export const EvalJob = z.object({
+  job_id: z.string(),
+  status: z.enum(["queued", "running", "done", "error"]),
+  progress: z.number(),
+  stage: z.string(),
+  result: EvalResult.nullable().optional(),
+  error: z.string().nullable().optional(),
+});
+
+export const Thresholds = z.object({
+  threshold: z.number(),
+  grey_margin: z.number(),
+  min_frac_coherent: z.number(),
+  min_snr_db: z.number(),
+  min_snr_flag_db: z.number(),
+  max_bg_ratio: z.number(),
+  max_bg_corr: z.number(),
+  min_bg_amp_ratio: z.number(),
+  min_duration_s: z.number(),
+  min_face_ratio: z.number(),
+  min_face_px: z.number(),
+  max_median_motion: z.number(),
+  max_fast_motion_frac: z.number(),
+});
+export type Thresholds = z.infer<typeof Thresholds>;
+
+export const CalibrationInfo = z.object({
+  defaults: Thresholds,
+  current: Thresholds.partial(),
+});

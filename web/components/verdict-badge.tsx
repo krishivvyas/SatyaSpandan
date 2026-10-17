@@ -1,5 +1,5 @@
 import { HelpCircle, ShieldCheck, TriangleAlert } from "lucide-react";
-import { VERDICT_SUMMARY, VERDICT_TEXT } from "@/lib/copy";
+import { VERDICT_SUMMARY, VERDICT_SUMMARY_BORDERLINE, VERDICT_TEXT } from "@/lib/copy";
 import type { AnalysisResult } from "@/lib/schemas";
 import { cn } from "@/lib/utils";
 
@@ -26,7 +26,9 @@ export function VerdictBadge({ result }: { result: AnalysisResult }) {
           <span aria-hidden className="mr-2">{s.dot}</span>
           {VERDICT_TEXT[key]}
         </h1>
-        <p className="mt-1 text-sm text-fg/80">{VERDICT_SUMMARY[key]}</p>
+        <p className="mt-1 text-sm text-fg/80">
+          {key === "real" && result.confidence === "Low" ? VERDICT_SUMMARY_BORDERLINE : VERDICT_SUMMARY[key]}
+        </p>
       </div>
       <dl className="flex sm:flex-col gap-x-6 gap-y-1 text-sm shrink-0">
         <div className="flex gap-2">
