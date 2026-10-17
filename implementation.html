@@ -1,0 +1,1030 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>SatyaSpandan Implementation Plan</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#fbfaf7;--panel:#ffffff;--ink:#1d1f23;--muted:#5d6470;--line:#e4e1da;--accent:#b4232c;--accent2:#0f6e6e;
+--code:#f3f1ec;--real:#1a7f37;--manip:#9a6700;--unable:#57606a;--th:#f6f3ee}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#121417;--panel:#191c20;--ink:#e7e9ec;--muted:#9aa3ad;--line:#2b3037;
+--accent:#ff6b6b;--accent2:#4fd1c5;--code:#1f2328;--real:#3fb950;--manip:#d29922;--unable:#8b949e;--th:#1f2328}}
+:root[data-theme="dark"]{--bg:#121417;--panel:#191c20;--ink:#e7e9ec;--muted:#9aa3ad;--line:#2b3037;
+--accent:#ff6b6b;--accent2:#4fd1c5;--code:#1f2328;--real:#3fb950;--manip:#d29922;--unable:#8b949e;--th:#1f2328}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.65 Inter,system-ui,sans-serif}
+.wrap{display:grid;grid-template-columns:260px minmax(0,1fr);gap:40px;max-width:1240px;margin:0 auto;padding:32px 24px}
+nav{position:sticky;top:24px;align-self:start;max-height:calc(100vh - 48px);overflow:auto;font-size:14px}
+nav .brand{font-weight:700;font-size:18px;color:var(--accent);margin-bottom:4px}
+nav .sub{color:var(--muted);font-size:13px;margin-bottom:16px}
+nav ul{list-style:none;padding:0;margin:0} nav li{margin:2px 0}
+nav a{color:var(--muted);text-decoration:none;display:block;padding:4px 10px;border-left:2px solid var(--line)}
+nav a:hover{color:var(--ink);border-left-color:var(--accent)}
+main{min-width:0}
+h1{font-size:34px;line-height:1.2;margin:0 0 8px;letter-spacing:-.01em}
+h2{font-size:24px;margin:48px 0 12px;padding-top:12px;border-top:1px solid var(--line)}
+h3{font-size:18px;margin:28px 0 8px;color:var(--accent2)}
+a{color:var(--accent2)}
+blockquote{margin:16px 0;padding:12px 18px;background:var(--panel);border-left:4px solid var(--accent);border-radius:6px;color:var(--ink)}
+blockquote p{margin:4px 0}
+code{font:0.88em 'JetBrains Mono',ui-monospace,monospace;background:var(--code);padding:1px 5px;border-radius:4px}
+pre{background:var(--code);border:1px solid var(--line);border-radius:8px;padding:14px 16px;overflow:auto;font-size:13px;line-height:1.5}
+pre code{background:none;padding:0;font-size:inherit}
+.tw{overflow-x:auto;margin:16px 0;border:1px solid var(--line);border-radius:8px;background:var(--panel)}
+table{border-collapse:collapse;width:100%;font-size:14px}
+th,td{padding:9px 12px;text-align:left;vertical-align:top;border-bottom:1px solid var(--line)}
+th{background:var(--th);font-weight:600}
+tr:last-child td{border-bottom:none}
+hr{border:none;border-top:1px solid var(--line);margin:32px 0}
+.v-real{color:var(--real);font-weight:600} .v-manip{color:var(--manip);font-weight:600} .v-unable{color:var(--unable);font-weight:600}
+.toggle{margin-top:18px;font:inherit;font-size:13px;background:var(--panel);color:var(--ink);border:1px solid var(--line);border-radius:6px;padding:6px 10px;cursor:pointer}
+@media (max-width:900px){.wrap{grid-template-columns:1fr;padding:20px 16px;gap:8px} nav{position:static;max-height:none} h1{font-size:27px}}
+@media print{nav,.toggle{display:none} .wrap{display:block}}
+</style></head>
+<body><div class="wrap">
+<nav><div class="brand">SatyaSpandan</div><div class="sub">Implementation Plan · v1.0</div><div class="toc">
+<ul>
+<li><a href="#1-what-we-are-building-in-one-paragraph">1. What we are building, in one paragraph</a></li>
+<li><a href="#2-what-the-reference-material-tells-us-and-how-it-shapes-the-design">2. What the reference material tells us (and how it shapes the design)</a></li>
+<li><a href="#3-system-architecture">3. System architecture</a></li>
+<li><a href="#4-repository-layout">4. Repository layout</a></li>
+<li><a href="#5-environment-setup">5. Environment setup</a></li>
+<li><a href="#6-step-1-rppg_enginepy-detailed-spec">6. Step 1 — rppg_engine.py (detailed spec)</a></li>
+<li><a href="#7-step-2-demo_testpy-synthetic-verification">7. Step 2 — demo_test.py (synthetic verification)</a></li>
+<li><a href="#8-step-3-website-fastapi-backend-nextjs-frontend">8. Step 3 — Website: FastAPI backend + Next.js frontend</a></li>
+<li><a href="#9-data-and-ethics">9. Data and ethics</a></li>
+<li><a href="#10-calibration-and-validation-plan">10. Calibration and validation plan</a></li>
+<li><a href="#11-known-risks-and-mitigations">11. Known risks and mitigations</a></li>
+<li><a href="#12-team-plan-4-members-about-3-days">12. Team plan (4 members, about 3 days)</a></li>
+<li><a href="#13-step-4-preview-pitch-skeleton-3-min">13. Step 4 preview — pitch skeleton (3 min)</a></li>
+<li><a href="#14-as-built-notes-17-oct-2026">14. As-built notes (17 Oct 2026)</a></li>
+<li><a href="#15-references">15. References</a></li>
+</ul>
+</div>
+
+<button class="toggle" onclick="var r=document.documentElement;var d=r.getAttribute('data-theme')==='dark'||(!r.getAttribute('data-theme')&&matchMedia('(prefers-color-scheme: dark)').matches);r.setAttribute('data-theme',d?'light':'dark')">Toggle theme</button></nav>
+<main><h1 id="satyaspandan-implementation-plan">SatyaSpandan — Implementation Plan</h1>
+<blockquote>
+<p><strong>सत्य स्पंदन · <em>The Pulse of Truth</em></strong>
+An explainable deepfake warning tool for <strong>Cyber Samvad Hackathon 2026 — Problem Statement 1: "Is This Video Real?"</strong>
+Approach: remote photoplethysmography (rPPG) and <strong>spatial pulse coherence</strong> across facial regions. It does not use a black-box pixel classifier.</p>
+</blockquote>
+<div class="tw"><table>
+<thead>
+<tr>
+<th></th>
+<th></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Status</strong></td>
+<td>v1.2: <strong>implemented</strong>. Engine, tests, API, website and pitch are built and verified; see §14 for what changed during the build.</td>
+</tr>
+<tr>
+<td><strong>Date</strong></td>
+<td>17 Oct 2026</td>
+</tr>
+<tr>
+<td><strong>Deliverables in order</strong></td>
+<td><code>backend/rppg_engine.py</code> → <code>backend/demo_test.py</code> → <code>backend/api.py</code> (FastAPI) → <code>web/</code> (Next.js + TypeScript + Tailwind) → 3-minute pitch</td>
+</tr>
+<tr>
+<td><strong>Stack</strong></td>
+<td><strong>Engine:</strong> Python 3.11, OpenCV, MediaPipe, SciPy · <strong>API:</strong> FastAPI + Uvicorn + Pydantic · <strong>Web:</strong> Next.js 16 (App Router), TypeScript, Tailwind CSS 4, shadcn/ui, Recharts, TanStack Query, Zod</td>
+</tr>
+<tr>
+<td><strong>Source material</strong></td>
+<td><code>ref/</code> folder (5 PDFs) and <a href="https://github.com/ubicomplab/rPPG-Toolbox"><code>ubicomplab/rPPG-Toolbox</code></a></td>
+</tr>
+</tbody>
+</table></div>
+<hr />
+<h2 id="1-what-we-are-building-in-one-paragraph">1. What we are building, in one paragraph</h2>
+<p>Each heartbeat pushes blood into facial skin, which changes its colour very slightly (mostly in green). A normal camera can record this. In a <strong>real</strong> face, the forehead, left cheek and right cheek all pulse <strong>at the same rate and almost in phase</strong>, because one heart feeds all of them. Face-swap and reenactment pipelines warp, blend and regenerate the face region by region. Modern fakes can carry a believable <em>global</em> heart rate (Seibold et al., 2025), but the <em>local</em> agreement between regions is often broken. SatyaSpandan measures that agreement, explains it with plots, and reports one of three cautious verdicts. It never claims proof.</p>
+<hr />
+<h2 id="2-what-the-reference-material-tells-us-and-how-it-shapes-the-design">2. What the reference material tells us (and how it shapes the design)</h2>
+<div class="tw"><table>
+<thead>
+<tr>
+<th>Source (in <code>ref/</code>)</th>
+<th>Key finding</th>
+<th>Design decision it drives</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Cyber Samvad guidelines</strong> (PS-1)</td>
+<td>Upload or demo file; three outputs: <em>"Possible manipulation detected" / "No strong signs detected" / "Unable to assess"</em>; highlight clues; confidence + plain-language explanation; reminder that results can be wrong; explain what it <strong>cannot</strong> detect; never call a real person a liar; use consented or openly licensed media.</td>
+<td>These are hard UI requirements (§8). The verdict strings are copied exactly. Only open datasets are used (§9).</td>
+</tr>
+<tr>
+<td><strong>FakeCatcher</strong> — Ciftci, Demir, Yin (arXiv 1901.02212, TPAMI 2020)</td>
+<td>Uses six signals <code>{G_L, G_R, G_M, C_L, C_R, C_M}</code> (Green and CHROM on the left cheek, right cheek and mid-region). <strong>Spatial coherence + temporal consistency</strong> is the key prior. Cross-PSD between regions separated 99.39 % of real/fake <em>pairs</em>, but a <em>generalised</em> SVM on that feature alone reached only ~69 %. Segments use ω = 128 frames. Reported 96 % on FF and 91 % on Celeb-DF / Deep Fakes.</td>
+<td>The core feature is cross-region coherence (Pearson, CPSD, magnitude-squared coherence). <strong>Expect lower accuracy from a feature set this small.</strong> We will not quote 96 %.</td>
+</tr>
+<tr>
+<td><strong>"High-quality deepfakes have a heart!"</strong> — Seibold et al., <em>Frontiers in Imaging</em> 2025</td>
+<td>DeepFaceLive-style fakes <strong>inherit the driver video's heart rate</strong> (strong correlation). Pipeline: MediaPipe landmarks, <strong>POS</strong> on a <strong>10 s (300-frame) sliding window</strong>, normalise, <strong>5th-order Butterworth 0.7–3.0 Hz</strong>, FFT, and <strong>two background patches</strong> whose FFT is subtracted from the face FFT. HR error std is 1.39 bpm at 10 s and 3.38 bpm at 8 s, rising further at 6 s and 5 s. The authors suggest spatial blood-flow plausibility as the way forward.</td>
+<td>(1) A global HR on its own <strong>never</strong> gives a "real" verdict. (2) We use their filter, window length and background-subtraction recipe. (3) The default window is 10 s and the hard minimum is 6 s.</td>
+</tr>
+<tr>
+<td><strong>"Deepfake detection from your pulse"</strong> (build guide)</td>
+<td>Concrete stack: <code>cv2.VideoCapture</code>, <code>CAP_PROP_FPS</code>, MediaPipe Face Landmarker (478 points), <code>detrend</code>, <code>butter(..., output='sos')</code>, <code>sosfiltfilt</code>, <code>rfft</code>. Compare 3–6 patches per window. Use logistic regression or SVM with <strong>GroupKFold by person</strong>. Pitfalls: compression, motion, short clips (a 10 s clip only resolves about 6 bpm), skin tone, quoting 96 %.</td>
+<td>This is our module layout and pitfall checklist. The upgrade path in §7.4 uses logistic regression with GroupKFold.</td>
+</tr>
+<tr>
+<td><strong>UBFC-rPPG</strong> — Bobbia et al. 2017</td>
+<td>Logitech C920, 30 fps, 640×480, <strong>uncompressed</strong>, CMS50E pulse-oximeter ground truth. Dataset 2 has 42 subjects doing a maths game.</td>
+<td>Our "real" reference clips and HR-accuracy benchmark. Because the dataset is uncompressed, we must also test on re-encoded copies (§10).</td>
+</tr>
+<tr>
+<td><strong>rPPG-Toolbox</strong> (UW Ubicomp, NeurIPS 2023)</td>
+<td>Reference implementations of <code>GREEN</code>, <code>CHROME_DEHAAN</code>, <code>POS_WANG</code>, plus <code>_calculate_fft_hr</code> (periodogram, next-power-of-2 nfft, argmax in band) and <code>_calculate_SNR</code> (power within ±6 bpm of the 1st and 2nd harmonics vs the rest of the band, in dB). Has a ready <code>UBFC-rPPG_UNSUPERVISED.yaml</code> config.</td>
+<td>We re-implement POS, CHROM and SNR following those algorithms in our own vectorised NumPy code, with the papers cited. We use the toolbox itself as an <strong>independent benchmark</strong> to sanity-check our HR MAE on UBFC. ⚠️ The toolbox uses the <em>Responsible AI Source Code License</em>, so we <strong>do not copy-paste</strong> its code into our repo.</td>
+</tr>
+</tbody>
+</table></div>
+<hr />
+<h2 id="3-system-architecture">3. System architecture</h2>
+<pre><code>                         ┌──────────────────────────────────────────────────────────────┐
+  video (.mp4/.avi) ───▶ │ 1. INGEST     cv2.VideoCapture · true FPS · ≤ 30 s · resize  │
+                         └──────────────┬───────────────────────────────────────────────┘
+                                        ▼
+                         ┌──────────────────────────────────────────────────────────────┐
+                         │ 2. LANDMARKS  MediaPipe FaceLandmarker (478 pts, VIDEO mode)  │
+                         │    ROI masks: Forehead(M) · Left cheek(L) · Right cheek(R)    │
+                         │               + 2 background patches (BG1, BG2)               │
+                         │    per-frame mean RGB per ROI  →  T × 5 × 3 array             │
+                         │    quality: face-found ratio, face size, motion               │
+                         └──────────────┬───────────────────────────────────────────────┘
+                                        ▼
+                         ┌──────────────────────────────────────────────────────────────┐
+                         │ 3. PULSE      GREEN | CHROM | POS  (per ROI)                 │
+                         │ 4. FILTER     detrend → Butterworth-5 SOS 0.7–3.0 Hz         │
+                         │               (sosfiltfilt) → z-normalise                     │
+                         └──────────────┬───────────────────────────────────────────────┘
+                                        ▼
+               ┌────────────────────────┴─────────────────────────┐
+               ▼                                                  ▼
+ ┌──────────────────────────────┐              ┌───────────────────────────────────────┐
+ │ 5. SPECTRAL / QUALITY        │              │ 6. SPATIAL COHERENCE (per 10 s window)│
+ │  PSD (periodogram, nfft=2^k) │              │  Pearson r: L–R, L–M, R–M             │
+ │  BPM = argmax in band × 60   │              │  CPSD + MSC at HR ± 0.15 Hz           │
+ │  SNR (dB, harmonic method)   │              │  phase lag at HR (ms)                 │
+ │  face PSD − background PSD   │              │  per-ROI BPM agreement                │
+ └──────────────┬───────────────┘              └───────────────────┬───────────────────┘
+                └────────────────────┬─────────────────────────────┘
+                                     ▼
+                ┌──────────────────────────────────────────────────┐
+                │ 7. DECISION                                      │
+                │  quality gate fails ─▶ ⚪ Unable to assess        │
+                │  coherence ≥ τ      ─▶ 🟢 No strong signs detected│
+                │  coherence &lt;  τ     ─▶ 🟡 Possible manipulation   │
+                │  + risk level + reasons[] (plain language)       │
+                └──────────────────────┬───────────────────────────┘
+                                       ▼
+                ┌──────────────────────────────────────────────────┐
+                │ 8. api.py  FastAPI  (JSON contract, Pydantic)    │
+                │  POST /api/analyze → job_id · GET /api/jobs/{id} │
+                └──────────────────────┬───────────────────────────┘
+                                       ▼  HTTP / JSON (polled)
+                ┌──────────────────────────────────────────────────┐
+                │ 9. web/  Next.js + TypeScript + Tailwind         │
+                │  ROI overlay · synced waves · PSD · metrics ·    │
+                │  explanation · disclaimer · limitations panel    │
+                └──────────────────────────────────────────────────┘
+</code></pre>
+<p><strong>Why it is split this way:</strong> MediaPipe, OpenCV and SciPy only run well in Python, so the signal processing stays in Python. The Python API exposes it as JSON. The browser app is pure TypeScript and never sees the maths, so the two halves can be built in parallel once the JSON contract (§8.3) is agreed.</p>
+<hr />
+<h2 id="4-repository-layout">4. Repository layout</h2>
+<pre><code>SatyaSpandan/
+├── implementation.md / implementation.html   ← this plan
+├── docker-compose.yml       ← optional: runs api + web together
+├── backend/
+│   ├── requirements.txt
+│   ├── rppg_engine.py       ← Step 1: all signal processing and scoring (no web code)
+│   ├── synthetic.py         ← synthetic Real / Fake / Unable trace generator (shared)
+│   ├── demo_test.py         ← Step 2: runs synthetic scenarios + checks
+│   ├── api.py               ← Step 3a: FastAPI app (jobs, samples, synthetic)
+│   ├── schemas.py           ← Pydantic models = the JSON contract
+│   ├── tools/
+│   │   ├── calibrate.py     ← fits thresholds τ from labelled clips (GroupKFold)
+│   │   └── eval_ubfc_hr.py  ← HR MAE vs UBFC ground_truth.txt
+│   ├── models/face_landmarker.task   (downloaded, ~3.6 MB)
+│   └── samples/             ← demo clips (open licence or consented only)
+│       ├── samples.json     ← id, title, description, licence, file
+│       ├── real_ubfc_subjectXX.mp4
+│       └── fake_demo.mp4
+├── web/                     ← Step 3b: Next.js app
+│   ├── app/
+│   │   ├── layout.tsx       ← fonts, theme provider, header, footer
+│   │   ├── page.tsx         ← landing: upload / pick sample / synthetic
+│   │   ├── analyze/[jobId]/page.tsx   ← results dashboard
+│   │   ├── how-it-works/page.tsx      ← science explainer
+│   │   └── limitations/page.tsx       ← full transparency page
+│   ├── components/
+│   │   ├── upload-dropzone.tsx   sample-picker.tsx   analysis-progress.tsx
+│   │   ├── verdict-badge.tsx     metric-cards.tsx    roi-overlay.tsx
+│   │   ├── pulse-wave-chart.tsx  spectrum-chart.tsx  coherence-timeline.tsx
+│   │   ├── reasons-list.tsx      disclaimer-banner.tsx  limitations-panel.tsx
+│   │   └── ui/               ← shadcn/ui primitives (card, tabs, accordion, …)
+│   ├── lib/
+│   │   ├── api.ts            ← typed fetch wrappers
+│   │   ├── schemas.ts        ← Zod schemas mirroring backend/schemas.py
+│   │   └── copy.ts           ← verdict strings, disclaimer, limitations (single source)
+│   ├── next.config.ts        ← rewrites /api/* → FastAPI in dev
+│   └── package.json
+└── ref/                      ← papers (already present)
+</code></pre>
+<hr />
+<h2 id="5-environment-setup">5. Environment setup</h2>
+<blockquote>
+<p>⚠️ <strong>Found on this machine:</strong> base Anaconda has <strong>NumPy 2.5.2 with a SciPy / scikit-learn built for NumPy 1.x</strong>, so <code>import sklearn</code> crashes. <strong>Do not use the base env.</strong> Create an isolated one.</p>
+</blockquote>
+<p><strong>Backend (Python)</strong></p>
+<pre><code class="language-powershell"># Python 3.11 or 3.12 (MediaPipe wheels exist for both)
+conda create -n satya python=3.11 -y
+conda activate satya
+cd backend
+pip install -r requirements.txt
+# MediaPipe face landmarker model
+curl -L -o models/face_landmarker.task https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task
+uvicorn api:app --reload --port 8000        # http://localhost:8000/docs for Swagger
+</code></pre>
+<p><code>backend/requirements.txt</code> (pin after the first working install with <code>pip freeze</code>):</p>
+<pre><code>numpy&gt;=1.26,&lt;2.3
+scipy&gt;=1.11
+opencv-python-headless&gt;=4.9   # headless: no GUI libs needed on a server
+mediapipe&gt;=0.10.14
+scikit-learn&gt;=1.4
+fastapi&gt;=0.115
+uvicorn[standard]&gt;=0.30
+python-multipart&gt;=0.0.9       # needed for file uploads
+pydantic&gt;=2.7
+matplotlib&gt;=3.8               # only for demo_test.py plots
+</code></pre>
+<p><strong>Frontend (Node 22, already installed on this machine)</strong></p>
+<pre><code class="language-powershell">npx create-next-app@latest web --typescript --tailwind --eslint --app --src-dir=false --import-alias &quot;@/*&quot; --use-npm
+cd web
+npx shadcn@latest init
+npx shadcn@latest add card button tabs accordion badge progress alert tooltip separator skeleton
+npm install @tanstack/react-query zod recharts react-dropzone lucide-react next-themes
+npm run dev                                   # http://localhost:3000
+</code></pre>
+<p>Versions current on npm today: <code>next</code> 16.4, <code>tailwindcss</code> 4.3, <code>recharts</code> 3.10. Commit <code>package-lock.json</code> so the whole team installs identical versions.</p>
+<p><strong>Running both for the demo:</strong> use two terminals (<code>uvicorn</code> + <code>npm run dev</code>), or <code>docker compose up</code>. <strong>Run the live demo on a local laptop</strong>, not a cloud host. That way venue Wi-Fi cannot break it and no uploaded video leaves the machine.</p>
+<hr />
+<h2 id="6-step-1-rppg_enginepy-detailed-spec">6. Step 1 — <code>rppg_engine.py</code> (detailed spec)</h2>
+<p>The design rule: <strong>pure functions plus one orchestrator.</strong> Every stage can be tested on its own, and <code>demo_test.py</code> can feed synthetic RGB traces into stage 3 directly, skipping video entirely.</p>
+<h3 id="61-public-api">6.1 Public API</h3>
+<pre><code class="language-python">@dataclass
+class EngineConfig:
+    method: str = &quot;POS&quot;            # &quot;GREEN&quot; | &quot;CHROM&quot; | &quot;POS&quot;
+    band_hz: tuple = (0.7, 3.0)    # 42–180 bpm (Seibold 2025)
+    filter_order: int = 5
+    window_s: float = 10.0         # Seibold: best HR stability at 10 s
+    step_s: float = 2.0
+    min_duration_s: float = 6.0
+    max_duration_s: float = 30.0   # cap processing time for the demo
+    max_width: int = 640           # downscale before landmarking
+    # quality-gate &amp; decision thresholds → §7 (calibrated, not hard-coded truths)
+
+@dataclass
+class AnalysisResult:
+    verdict: str                   # exactly one of the 3 hackathon strings
+    verdict_key: str               # &quot;real&quot; | &quot;manip&quot; | &quot;unable&quot;
+    risk_level: str                # &quot;Low&quot; | &quot;Medium&quot; | &quot;High&quot; | &quot;—&quot;
+    bpm: float | None
+    coherence_score: float | None  # 0–100 %
+    snr_db: float | None
+    reasons: list[str]             # plain-language bullet points
+    quality: dict                  # face_ratio, face_px, motion, duration_s, fps
+    fps: float
+    t: np.ndarray                  # time axis (s)
+    signals: dict[str, np.ndarray] # filtered pulse per ROI: &quot;forehead&quot;,&quot;left&quot;,&quot;right&quot;
+    psd: dict                      # freqs, per-ROI PSD, background PSD, cleaned PSD
+    windows: list[dict]            # per-window metrics (for the timeline chart)
+    overlay_frame: np.ndarray      # BGR frame with ROI polygons drawn
+
+def analyze_video(path: str, cfg: EngineConfig = EngineConfig(), progress=None) -&gt; AnalysisResult
+def analyze_traces(rgb: dict[str, np.ndarray], fps: float, cfg=EngineConfig(), quality=None) -&gt; AnalysisResult
+</code></pre>
+<p><code>analyze_traces</code> is the seam that lets <code>demo_test.py</code> test all the maths without MediaPipe.</p>
+<p><code>AnalysisResult.to_dict()</code> converts NumPy arrays to lists. For the web it also <strong>downsamples the waves to about 600 points</strong>, keeps PSD bins only for 30–240 bpm, and encodes <code>overlay_frame</code> as a base64 JPEG, which keeps the JSON payload around 100–200 KB.</p>
+<h3 id="62-stage-1-ingestion">6.2 Stage 1 — Ingestion</h3>
+<ul>
+<li><code>cap = cv2.VideoCapture(path)</code> and <code>fps = cap.get(cv2.CAP_PROP_FPS)</code>.</li>
+<li><strong>Sanity check:</strong> if <code>fps</code> is 0, NaN or outside 10–120, fall back to <code>CAP_PROP_POS_MSEC</code> timestamps (<code>n_frames / duration</code>). If that also fails, return <strong><span class="v-unable">Unable to assess</span></strong> ("could not read the frame rate").</li>
+<li>Variable-frame-rate phone clips: store the per-frame <code>POS_MSEC</code> timestamps. If their jitter is above 10 %, resample the RGB traces to a uniform grid at the median FPS with <code>np.interp</code> before filtering.</li>
+<li>Read at most <code>max_duration_s × fps</code> frames. Downscale to <code>max_width</code> (this keeps MediaPipe fast and does not change the spatial means).</li>
+<li>Convert BGR to RGB once per frame.</li>
+</ul>
+<h3 id="63-stage-2-landmarks-and-rois">6.3 Stage 2 — Landmarks and ROIs</h3>
+<p><strong>MediaPipe Tasks API</strong> (<code>mediapipe.tasks.python.vision.FaceLandmarker</code>), <code>running_mode=VIDEO</code>, <code>num_faces=1</code>, <code>min_face_detection_confidence=0.5</code>, <code>min_tracking_confidence=0.5</code>. Call <code>detect_for_video(mp_image, timestamp_ms)</code> with monotonically increasing timestamps (<code>int(i * 1000 / fps)</code>).</p>
+<p>ROI polygons, using MediaPipe 478-mesh indices. "Left/Right" means the <strong>subject's</strong> side. These are starting sets: <strong>verify them in the first hour</strong> by drawing the indices on one frame, as the build guide recommends.</p>
+<div class="tw"><table>
+<thead>
+<tr>
+<th>ROI</th>
+<th>Landmark polygon (starting set)</th>
+<th>Why this region</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Forehead (M)</td>
+<td><code>10, 338, 297, 299, 296, 336, 9, 107, 66, 69, 67, 109</code></td>
+<td>Thin skin and strong signal (Verkruysse 2008). Avoid hair and eyebrows.</td>
+</tr>
+<tr>
+<td>Left cheek (L)</td>
+<td><code>345, 346, 347, 348, 349, 329, 371, 266, 425, 411, 352</code></td>
+<td>Large flat skin patch, away from the mouth.</td>
+</tr>
+<tr>
+<td>Right cheek (R)</td>
+<td><code>116, 117, 118, 119, 120, 100, 142, 36, 205, 187, 123</code></td>
+<td>Mirror of L.</td>
+</tr>
+<tr>
+<td>Background BG1 and BG2</td>
+<td>Two squares, each 12 % of frame width, at the top-left and top-right of the frame. Any square that overlaps the face bounding box (+15 % margin) is shifted down.</td>
+<td>Measures ambient flicker and compression noise (Seibold 2025).</td>
+</tr>
+</tbody>
+</table></div>
+<p>Per frame:
+1. Convert landmarks to pixel coordinates. Fill each polygon with <code>cv2.fillPoly</code> into a small mask, cropped to the polygon's bounding rectangle for speed.
+2. <strong>Skin filter</strong> inside the mask: drop pixels outside a broad YCrCb skin range and the top and bottom 5 % of luminance. This removes specular highlights, beard and shadow edges. The YCrCb range must be <strong>wide enough for all Fitzpatrick skin types</strong> (see §11).
+3. Mean R, G, B of the remaining pixels. Store <code>NaN</code> if fewer than 50 pixels are left.
+4. Quality bookkeeping:
+   - <code>face_found[i]</code> (true/false)
+   - <code>face_px</code> = inter-ocular distance in pixels (landmarks 33 to 263)
+   - <code>motion[i]</code> = median landmark displacement since the previous frame ÷ inter-ocular distance
+5. Save one overlay frame (the middle frame) with the polygons drawn: forehead amber, left cheek blue, right cheek magenta, background grey dashed.</p>
+<p>Missing frames: if a gap is shorter than 0.5 s, fill it by linear interpolation. Longer gaps split the clip into segments, and only segments of at least <code>min_duration_s</code> are analysed.</p>
+<h3 id="64-stage-3-pulse-extraction-per-roi">6.4 Stage 3 — Pulse extraction (per ROI)</h3>
+<p>All three methods take <code>rgb: (T, 3)</code> and return <code>pulse: (T,)</code>. Our code is vectorised and written from the original papers, following the same algorithmic steps as the rPPG-Toolbox implementations.</p>
+<p><strong>GREEN</strong> (Verkruysse 2008, the baseline): <code>pulse = rgb[:, 1]</code>.</p>
+<p><strong>CHROM</strong> (de Haan &amp; Jeanne 2013): within sliding windows of 1.6 s with 50 % overlap,</p>
+<pre><code>Cn = rgb_win / mean(rgb_win)
+X  = 3·R − 2·G
+Y  = 1.5·R + G − 1.5·B
+Xf, Yf = bandpass(X), bandpass(Y)
+S  = Xf − (σ(Xf)/σ(Yf))·Yf
+</code></pre>
+<p>Then apply a Hann window and overlap-add the windows.</p>
+<p><strong>POS</strong> (Wang et al. 2017, the default because Seibold 2025 uses it), with window <code>l = ceil(1.6·fs)</code>:</p>
+<pre><code>Cn = rgb[m:n] / mean(rgb[m:n])        # temporal normalisation
+S  = [[0, 1, −1], [−2, 1, 1]] @ Cnᵀ   # project onto plane orthogonal to skin tone
+h  = S0 + (σ(S0)/σ(S1))·S1            # alpha tuning
+H[m:n] += h − mean(h)                 # overlap-add
+</code></pre>
+<p>Run the method on each ROI separately (<code>forehead</code>, <code>left</code>, <code>right</code>) <strong>and</strong> on the pooled skin (the pixel-weighted mean of all three) to get the global pulse used for BPM.</p>
+<p><strong>Background traces:</strong> the background patches use the <strong>green channel</strong> (POS assumes skin, so it means nothing on a wall). The two background traces are averaged into one, as Seibold does.</p>
+<h3 id="65-stage-4-filtering">6.5 Stage 4 — Filtering</h3>
+<pre><code class="language-python">x = scipy.signal.detrend(pulse, type=&quot;linear&quot;)            # slow illumination drift
+sos = scipy.signal.butter(5, [0.7, 3.0], btype=&quot;bandpass&quot;, fs=fps, output=&quot;sos&quot;)
+x = scipy.signal.sosfiltfilt(sos, x)                       # zero-phase, keeps inter-ROI lags real
+x = (x - x.mean()) / (x.std() + 1e-9)                      # z-normalise
+</code></pre>
+<ul>
+<li><strong>Zero-phase</strong> filtering (<code>sosfiltfilt</code>) is essential. A one-way filter would add phase shifts that could be mistaken for inter-region lag.</li>
+<li>Guard: <code>sosfiltfilt</code> needs <code>len(x) &gt; 3·(2·order+1)</code>. This is always true above 6 s.</li>
+<li>Optional: a <code>detrend</code> λ-smoothness prior (Tarvainen, as used in the toolbox) with λ = 100, behind a flag, for strong lighting drift.</li>
+</ul>
+<h3 id="66-stage-5-spectrum-bpm-snr-background-subtraction">6.6 Stage 5 — Spectrum, BPM, SNR, background subtraction</h3>
+<pre><code class="language-python">nfft = next_pow2(len(x)) * 2                     # zero-pad for finer bins
+f, P = scipy.signal.periodogram(x, fs=fps, nfft=nfft, detrend=False)
+band = (f &gt;= 0.7) &amp; (f &lt;= 3.0)
+bpm  = 60 * f[band][argmax(P[band])]
+</code></pre>
+<ul>
+<li><strong>SNR (dB)</strong>, following the toolbox <code>_calculate_SNR</code> definition with the <em>estimated</em> HR because we have no oximeter: power within ±0.1 Hz (6 bpm) of the 1st and 2nd harmonics, divided by the remaining in-band power, then <code>10·log10</code>.</li>
+<li><strong>Background-cleaned PSD</strong> (Seibold): normalise the face and background PSDs to unit area in the band, then compute <code>P_clean = clip(P_face − P_bg, 0, ∞)</code>. Take the BPM from <code>P_clean</code>. Also compute <code>bg_ratio = P_bg(f_hr) / P_face(f_hr)</code>. A high ratio means the "pulse" is really ambient flicker or a compression artefact, and the clip goes to <strong><span class="v-unable">Unable to assess</span></strong>.</li>
+<li><strong>Sliding windows:</strong> 10 s windows with a 2 s step. The BPM per window gives a HR-over-time trace. A HR that jumps by more than 15 bpm between neighbouring windows is physiologically implausible, and becomes a reason string plus a small penalty.</li>
+<li>Resolution note for the UI: a window of length W seconds resolves <code>60/W</code> bpm, which is 6 bpm at 10 s. Zero-padding only interpolates the spectrum and does not add resolution.</li>
+</ul>
+<h3 id="67-stage-6-spatial-coherence-the-core-forensic-feature">6.7 Stage 6 — Spatial coherence (the core forensic feature)</h3>
+<p>For each 10 s window and each ROI pair <code>(L,R)</code>, <code>(L,M)</code>, <code>(R,M)</code>:</p>
+<div class="tw"><table>
+<thead>
+<tr>
+<th>Feature</th>
+<th>Computation</th>
+<th>Real face expectation</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Pearson r</td>
+<td><code>np.corrcoef(xa, xb)[0,1]</code> on filtered signals</td>
+<td>High (≳ 0.5 for clean video)</td>
+</tr>
+<tr>
+<td>Magnitude-squared coherence at HR</td>
+<td><code>f, C = scipy.signal.coherence(xa, xb, fs, nperseg=min(len, int(4*fs)))</code>, then mean C over <code>f_hr ± 0.15 Hz</code></td>
+<td>High (≳ 0.6)</td>
+</tr>
+<tr>
+<td>Cross-PSD peak and phase</td>
+<td><code>f, Pxy = scipy.signal.csd(xa, xb, fs, nperseg=…)</code>, then <code>abs(Pxy)</code> at f_hr (FakeCatcher F1: mean and max of CPSD), and <code>angle(Pxy)</code> at f_hr converted to a lag in ms: <code>Δφ / (2π f_hr) · 1000</code></td>
+<td>Small lag (pulse transit across the face is only tens of ms)</td>
+</tr>
+<tr>
+<td>BPM agreement</td>
+<td><code>|BPM_a − BPM_b|</code> per ROI</td>
+<td>≤ 6 bpm (one bin)</td>
+</tr>
+<tr>
+<td>Region–background correlation</td>
+<td><code>corr(x_roi, x_bg)</code></td>
+<td>Low. If it is high, the "pulse" is global lighting or compression.</td>
+</tr>
+</tbody>
+</table></div>
+<p><strong>Spatial Coherence Score (SCS, 0–100 %)</strong>, per window:</p>
+<pre><code>r̄    = mean of the 3 pair Pearson r, clipped to [0, 1]
+MSC̄  = mean of the 3 pair coherences at f_hr
+agree = fraction of the 3 pairs with |ΔBPM| ≤ 6 and |lag| ≤ lag_max (start lag_max = 150 ms)
+SCS_w = 100 · (0.4·r̄ + 0.4·MSC̄ + 0.2·agree)
+</code></pre>
+<p>Video SCS = <strong>median</strong> over windows, which is robust to one bad window from a head turn. Also report <code>frac_coherent</code> = the share of windows with <code>SCS_w ≥ τ</code>.</p>
+<p>The weights (0.4 / 0.4 / 0.2) are a transparent starting point. In §7.4 a logistic regression on the same features replaces hand-set weights, and its coefficients can still be explained.</p>
+<h3 id="68-stage-7-decision-logic">6.8 Stage 7 — Decision logic</h3>
+<p><strong>A. Quality gate.</strong> If <strong>any</strong> of these is true, the verdict is ⚪ <strong>"Unable to assess"</strong>, with the specific reason:</p>
+<div class="tw"><table>
+<thead>
+<tr>
+<th>Check</th>
+<th>Starting threshold</th>
+<th>Reason shown to user</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Usable duration</td>
+<td>&lt; 6 s</td>
+<td>"The clip is too short to measure a heartbeat reliably (at least 6 seconds of visible face needed)."</td>
+</tr>
+<tr>
+<td>Face found ratio</td>
+<td>&lt; 80 % of frames</td>
+<td>"A face was not visible clearly enough in most frames."</td>
+</tr>
+<tr>
+<td>Face size</td>
+<td>inter-ocular &lt; 40 px</td>
+<td>"The face is too small or far away for skin-colour analysis."</td>
+</tr>
+<tr>
+<td>Motion</td>
+<td>median motion &gt; 0.05 inter-ocular/frame, or &gt; 30 % of frames above 0.10</td>
+<td>"There is too much head or camera movement."</td>
+</tr>
+<tr>
+<td>Signal quality</td>
+<td>best single-region SNR &lt; −1 dB (SNR band = ±max(0.1 Hz, 1/duration) around the 1st and 2nd harmonics)</td>
+<td>"The pulse signal is too weak, which is typical of heavily compressed, forwarded or very dark videos."</td>
+</tr>
+<tr>
+<td>Ambient dominance</td>
+<td>on the best region: bg_ratio &gt; 0.5 or ROI–bg corr &gt; 0.6</td>
+<td>"Lighting flicker or compression noise looks like a pulse, so no reliable reading is possible."</td>
+</tr>
+</tbody>
+</table></div>
+<p><strong>B. Verdict</strong> (only if the gate passes):
+- <code>SCS ≥ τ</code> <strong>and</strong> <code>frac_coherent ≥ 0.6</code> → 🟢 <strong>"No strong signs detected"</strong>
+- otherwise → 🟡 <strong>"Possible manipulation detected"</strong></p>
+<p>Starting value τ = 55. <strong>It is replaced by the calibrated value from <code>tools/calibrate.py</code></strong> (§10).</p>
+<p><strong>C. Risk level</strong> (shown next to the badge, never as a "fake probability"):
+- <code>|SCS − τ| ≥ 20</code> → High confidence in the direction of the verdict
+- <code>10–20</code> → Medium
+- <code>&lt; 10</code> → Low ("borderline: please treat with extra caution")</p>
+<p>Wording maps to: 🟢 + High → "Low risk"; 🟡 + High → "High risk".</p>
+<p><strong>D. Reasons generator.</strong> This is a pure function from metrics to a list of strings. Each rule fires independently, and the UI shows the top 3–4. Examples:
+- <code>r_LR &lt; 0.3</code> → "The left and right cheeks do not pulse together (correlation 0.21). In a real face both cheeks are fed by the same heartbeat."
+- <code>|BPM_L − BPM_M| &gt; 10</code> → "The forehead shows 96 bpm but the left cheek shows 72 bpm. A single heart cannot produce two different rates."
+- <code>lag &gt; 150 ms</code> → "The right cheek lags the forehead by 240 ms, far more than natural blood-flow delays."
+- <code>HR jumps</code> → "The heart rate jumps by 25 bpm within 2 seconds, which is physiologically unlikely."
+- Green verdict → "All three skin regions rise and fall together at about 74 bpm (coherence 81 %)."
+- <strong>Always appended:</strong> "A visible heartbeat does not prove a video is real. Modern face-swaps can copy the pulse of the source video (Seibold et al., 2025)."</p>
+<p>Reasons are returned as <code>{code, severity, text}</code>, for example <code>{"code": "cheek_desync", "severity": "warn", "text": "..."}</code>. The website can then show an icon per reason, and translate by <code>code</code> later (Hindi is a stretch goal).</p>
+<hr />
+<h2 id="7-step-2-demo_testpy-synthetic-verification">7. Step 2 — <code>demo_test.py</code> (synthetic verification)</h2>
+<p>Goal: prove the maths <strong>before</strong> touching real video, and give the jury a deterministic demo that needs no dataset.</p>
+<p>The generator lives in <code>backend/synthetic.py</code>, so that both <code>demo_test.py</code> and the API's <code>/api/synthetic/{scenario}</code> endpoint use the same code. The website therefore has a "Synthetic scenarios" tab that works with no video at all.</p>
+<h3 id="71-signal-generator">7.1 Signal generator</h3>
+<p>Generate per-ROI <strong>RGB</strong> traces (not pulses), so that GREEN, CHROM and POS are all exercised:</p>
+<pre><code>skin_base  = [R,G,B] ≈ (180, 120, 100)   (vary across Fitzpatrick-like tones)
+pulse(t)   = sin(2π·f_hr(t)·t + φ_roi) + 0.3·sin(2·2π·f_hr·t)     # 2nd harmonic
+f_hr(t)    = 1.2 Hz + 0.03·sin(2π·0.25·t)                          # HRV / respiration modulation
+pulse vector (relative) = [0.33, 0.77, 0.53] · A    (blood absorbs green most; de Haan PBV)
+rgb_roi(t) = skin_base · (1 + 0.01·illum(t)) · (1 + pulse_vector·pulse(t)) + noise
+illum(t)   = slow drift (0.05 Hz) + optional flicker
+</code></pre>
+<div class="tw"><table>
+<thead>
+<tr>
+<th>Scenario</th>
+<th>Construction</th>
+<th>Expected verdict</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>REAL</strong></td>
+<td>Same <code>f_hr</code> everywhere, φ lags of 0–30 ms, Gaussian noise σ at SNR ≈ +5 dB</td>
+<td>🟢 No strong signs</td>
+</tr>
+<tr>
+<td><strong>FAKE — desync</strong></td>
+<td>Forehead at 1.2 Hz; cheeks at 1.45 Hz and 0.95 Hz, or the same rate with random phase jumps every 2–3 s (blending-seam behaviour)</td>
+<td>🟡 Possible manipulation</td>
+</tr>
+<tr>
+<td><strong>FAKE — inherited HR</strong> (Seibold case)</td>
+<td>All ROIs share a <em>global</em> 1.2 Hz component, but the cheeks add strong independent band-limited noise plus a 200 ms lag</td>
+<td>🟡, and it demonstrates that the global HR alone looks fine</td>
+</tr>
+<tr>
+<td><strong>UNABLE — noise</strong></td>
+<td>Pulse amplitude 0.05×, noise ×10 (simulating compression)</td>
+<td>⚪ Unable (SNR)</td>
+</tr>
+<tr>
+<td><strong>UNABLE — short</strong></td>
+<td>REAL but only 4 s long</td>
+<td>⚪ Unable (duration)</td>
+</tr>
+<tr>
+<td><strong>UNABLE — flicker</strong></td>
+<td>Strong 1.0 Hz illumination flicker present in the background too</td>
+<td>⚪ Unable (ambient)</td>
+</tr>
+</tbody>
+</table></div>
+<h3 id="72-checks-run-with-python-demo_testpy-which-exits-non-zero-on-failure">7.2 Checks (run with <code>python demo_test.py</code>, which exits non-zero on failure)</h3>
+<ul>
+<li>Recovered BPM is within ±3 bpm of the true value for REAL, for each of GREEN, CHROM and POS.</li>
+<li>Verdict matches the table for every scenario, with seeds 0–19 (20 runs each, so we test robustness rather than a lucky seed). The default <strong>POS must be 20/20</strong>. CHROM and GREEN must reach at least 18/20, because their colour combinations amplify sensor noise on the darkest synthetic skin tone (see §14).</li>
+<li>SCS(REAL) − SCS(FAKE-desync) ≥ 30 points on average.</li>
+<li>Plots are saved to <code>demo_out/*.png</code> so the team can see the waves.</li>
+</ul>
+<h3 id="73-plugging-in-real-clips-instructions-written-into-the-scripts-docstring">7.3 Plugging in real clips (instructions written into the script's docstring)</h3>
+<ul>
+<li><code>python demo_test.py --video samples/real_ubfc_subject1.mp4</code> runs the full pipeline and prints a report.</li>
+<li><code>python tools/eval_ubfc_hr.py --root D:/UBFC/DATASET_2</code> reads <code>subject*/vid.avi</code> and <code>ground_truth.txt</code> (line 1 = PPG wave, line 2 = HR, line 3 = timestamps), then prints MAE, RMSE and Pearson against the oximeter. <strong>Target: POS MAE &lt; 5 bpm on still clips.</strong> For comparison, run rPPG-Toolbox with <code>configs/infer_configs/UBFC-rPPG_UNSUPERVISED.yaml</code> (set <code>DATA_PATH</code>, and <code>DO_PREPROCESS: True</code> on the first run).</li>
+<li>FaceForensics++ pairs: <code>original_sequences/youtube/c23/videos/XXX.mp4</code> vs <code>manipulated_sequences/Deepfakes/c23/videos/XXX_YYY.mp4</code>. This needs the FF++ access form, so request it <strong>today</strong>.</li>
+</ul>
+<h3 id="74-upgrade-path-a-learned-decision-only-if-time-permits">7.4 Upgrade path: a learned decision (only if time permits)</h3>
+<ul>
+<li>Per-window feature vector of about 20 numbers: 3×r, 3×MSC, 3×|lag|, 3×ΔBPM, 3× CPSD mean and max, SNR, bg_ratio, HR jump.</li>
+<li><code>LogisticRegression(class_weight="balanced")</code> + <code>StandardScaler</code>, using <strong><code>GroupKFold</code> by source identity</strong>. A real video and every fake derived from it stay on the same side of the split.</li>
+<li>Windows vote, and the video score is the mean probability. Report the cross-validated accuracy <strong>honestly</strong>. Above chance on unseen people is a valid result.</li>
+<li>The coefficients remain explainable ("cheek correlation carries the most weight").</li>
+</ul>
+<hr />
+<h2 id="8-step-3-website-fastapi-backend-nextjs-frontend">8. Step 3 — Website: FastAPI backend + Next.js frontend</h2>
+<h3 id="81-backend-api-backendapipy">8.1 Backend API (<code>backend/api.py</code>)</h3>
+<p>Analysing a 15–30 s clip takes 5–30 s, which is too long for a single blocking request with a nice progress bar. So the API uses a <strong>job + polling</strong> pattern: an in-memory job store, with <code>BackgroundTasks</code> or a <code>ThreadPoolExecutor(max_workers=2)</code>.</p>
+<div class="tw"><table>
+<thead>
+<tr>
+<th>Method &amp; path</th>
+<th>Body / params</th>
+<th>Returns</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>POST /api/analyze</code></td>
+<td>multipart <code>file</code> (mp4/avi/mov/webm, <strong>≤ 50 MB</strong>), optional <code>method=POS\|CHROM\|GREEN</code></td>
+<td><code>202 {job_id}</code></td>
+</tr>
+<tr>
+<td><code>POST /api/analyze/sample/{sample_id}</code></td>
+<td>—</td>
+<td><code>202 {job_id}</code></td>
+</tr>
+<tr>
+<td><code>GET /api/jobs/{job_id}</code></td>
+<td>—</td>
+<td><code>{status: "queued"\|"running"\|"done"\|"error", progress: 0–1, stage: "Tracking face…", result?: AnalysisResult, error?: string}</code></td>
+</tr>
+<tr>
+<td><code>GET /api/samples</code></td>
+<td>—</td>
+<td>list from <code>samples.json</code> (id, title, description, licence, thumbnail)</td>
+</tr>
+<tr>
+<td><code>GET /api/synthetic/{scenario}</code></td>
+<td><code>real \| fake_desync \| fake_inherited \| unable_noise \| unable_short \| unable_flicker</code>, <code>seed</code></td>
+<td><code>AnalysisResult</code> (instant, no job)</td>
+</tr>
+<tr>
+<td><code>GET /api/health</code></td>
+<td>—</td>
+<td><code>{ok, mediapipe_model_loaded}</code></td>
+</tr>
+</tbody>
+</table></div>
+<p>Backend rules:
+- Check the file <strong>type by content</strong>, using <code>cv2.VideoCapture</code> opening successfully, not only the extension. Reject clips longer than 2 minutes.
+- Write uploads to <code>tempfile.NamedTemporaryFile</code> and <strong>delete them in <code>finally</code></strong> once the job ends. Results expire from memory after 15 minutes. Video is never saved to disk permanently.
+- Create the MediaPipe <code>FaceLandmarker</code> per job. It is not thread-safe, and VIDEO mode needs increasing timestamps.
+- CORS: allow only <code>http://localhost:3000</code> in dev. In production the web app proxies through its own domain, so CORS is not needed.
+- Errors return a friendly message ("We couldn't read this video file. Try MP4 (H.264)."), never a stack trace.</p>
+<h3 id="82-json-contract-backendschemaspy-weblibschemasts">8.2 JSON contract (<code>backend/schemas.py</code> ⇄ <code>web/lib/schemas.ts</code>)</h3>
+<pre><code class="language-ts">// web/lib/schemas.ts — mirrors the Pydantic models exactly
+export const Verdict = z.enum([&quot;real&quot;, &quot;manip&quot;, &quot;unable&quot;]);
+export const AnalysisResult = z.object({
+  verdict: z.string(),                       // exact hackathon wording
+  verdict_key: Verdict,
+  risk_level: z.enum([&quot;Low&quot;, &quot;Medium&quot;, &quot;High&quot;, &quot;—&quot;]),
+  bpm: z.number().nullable(),
+  coherence_score: z.number().nullable(),    // 0–100
+  snr_db: z.number().nullable(),
+  reasons: z.array(z.object({ code: z.string(), severity: z.enum([&quot;info&quot;,&quot;warn&quot;,&quot;block&quot;]), text: z.string() })),
+  quality: z.object({ face_ratio: z.number(), face_px: z.number(), motion: z.number(),
+                      duration_s: z.number(), fps: z.number() }),
+  t: z.array(z.number()),                                         // ≤ 600 points
+  signals: z.object({ forehead: z.array(z.number()), left: z.array(z.number()), right: z.array(z.number()) }),
+  psd: z.object({ bpm_axis: z.array(z.number()), forehead: z.array(z.number()), left: z.array(z.number()),
+                  right: z.array(z.number()), background: z.array(z.number()), cleaned: z.array(z.number()) }),
+  windows: z.array(z.object({ t_start: z.number(), t_end: z.number(), scs: z.number(), bpm: z.number(),
+                              r_lr: z.number(), r_lm: z.number(), r_rm: z.number() })),
+  threshold: z.number(),                     // τ, for the timeline line
+  overlay_jpeg_b64: z.string().nullable(),
+  method: z.enum([&quot;POS&quot;, &quot;CHROM&quot;, &quot;GREEN&quot;]),
+});
+export type AnalysisResult = z.infer&lt;typeof AnalysisResult&gt;;
+</code></pre>
+<p>The frontend runs <code>AnalysisResult.parse(json)</code> on every response. If the backend changes shape, the page shows a clear error instead of a broken chart.</p>
+<h3 id="83-frontend-pages-and-flow">8.3 Frontend pages and flow</h3>
+<pre><code> /  (landing)                          /analyze/[jobId]  (results)
+┌─────────────────────────────────┐   ┌───────────────────────────────────────────────┐
+│ 🫀 SatyaSpandan                  │   │ ⚠️ Disclaimer banner (sticky, not dismissible) │
+│ &quot;Is this video real?&quot;            │   │ ┌───────────────────────────────────────────┐ │
+│ ┌─────────────────────────────┐ │   │ │ VERDICT  🟢/🟡/⚪  risk level · method      │ │
+│ │ Tabs: Upload | Samples |    │ │   │ └───────────────────────────────────────────┘ │
+│ │       Synthetic             │ │   │ [BPM] [Coherence %] [SNR dB] [Face tracking %]│
+│ │  ┌───────────────────────┐  │ │   │ ┌─────────────────┐ ┌───────────────────────┐ │
+│ │  │ Drop a video here     │  │ │──▶│ │ ROI overlay img │ │ Why this result       │ │
+│ │  │ MP4/MOV/WebM ≤ 50 MB  │  │ │   │ └─────────────────┘ │ • cheeks out of sync  │ │
+│ │  └───────────────────────┘  │ │   │                     │ • …                   │ │
+│ │ Method: POS ▾  [Analyse]    │ │   │                     └───────────────────────┘ │
+│ └─────────────────────────────┘ │   │ Tabs: Pulse waves | Spectrum | Over time      │
+│ How it works (3 steps) · Limits │   │ ▸ System Limitations &amp; Transparency           │
+└─────────────────────────────────┘   │ [Analyse another video]                       │
+                                      └───────────────────────────────────────────────┘
+</code></pre>
+<p>While a job runs, the results page shows <code>analysis-progress.tsx</code>: the stage name from the API ("Reading video → Tracking face → Extracting pulse → Comparing regions"), a progress bar, and skeleton cards. Polling uses TanStack Query <code>useQuery</code> with <code>refetchInterval: 800</code> that stops once the status is <code>done</code> or <code>error</code>.</p>
+<h3 id="84-components">8.4 Components</h3>
+<div class="tw"><table>
+<thead>
+<tr>
+<th>Component</th>
+<th>Implementation detail</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>upload-dropzone.tsx</code></td>
+<td><code>react-dropzone</code>, accepting <code>video/*</code> up to 50 MB, with a client-side duration check through a hidden <code>&lt;video&gt;</code> element's <code>loadedmetadata</code>. Shows a consent checkbox: "I have the right to analyse this video." Sends with <code>FormData</code>, then <code>router.push('/analyze/' + jobId)</code>.</td>
+</tr>
+<tr>
+<td><code>sample-picker.tsx</code></td>
+<td>Cards from <code>GET /api/samples</code>, showing title, licence line and "Real reference" / "Demo fake" tag.</td>
+</tr>
+<tr>
+<td>Synthetic tab</td>
+<td>Six scenario buttons that call <code>/api/synthetic/...</code>. The result renders on the same results view (<code>/analyze/synthetic-&lt;scenario&gt;</code>). This keeps the demo usable even if the video pipeline fails.</td>
+</tr>
+<tr>
+<td><code>verdict-badge.tsx</code></td>
+<td>Large card. Green <code>#1a7f37</code> with a <code>ShieldCheck</code> icon for "No strong signs detected"; amber <code>#9a6700</code> with <code>AlertTriangle</code> for "Possible manipulation detected"; grey <code>#57606a</code> with <code>HelpCircle</code> for "Unable to assess". The text is always present, so colour is never the only cue. <code>role="status"</code> and <code>aria-live="polite"</code> let screen readers announce it.</td>
+</tr>
+<tr>
+<td><code>metric-cards.tsx</code></td>
+<td>Four cards, each with a <code>Tooltip</code> explaining the metric in one sentence. SNR also shows a Good/Fair/Poor label.</td>
+</tr>
+<tr>
+<td><code>roi-overlay.tsx</code></td>
+<td><code>&lt;img src={"data:image/jpeg;base64," + b64}&gt;</code> with a colour legend: forehead amber, left cheek blue, right cheek magenta, background grey.</td>
+</tr>
+<tr>
+<td><code>pulse-wave-chart.tsx</code></td>
+<td>Recharts <code>LineChart</code>, three <code>Line</code>s on a shared time axis, <code>isAnimationActive={false}</code>. Toggle between overlaid and stacked (three small <code>LineChart</code>s with the same <code>syncId</code> so the tooltips move together). Low-coherence windows are shaded with <code>ReferenceArea</code> in amber.</td>
+</tr>
+<tr>
+<td><code>spectrum-chart.tsx</code></td>
+<td>Recharts PSD per region plus a dashed background line. A <code>ReferenceLine</code> marks the detected BPM. The x-axis is labelled in <strong>bpm</strong>.</td>
+</tr>
+<tr>
+<td><code>coherence-timeline.tsx</code></td>
+<td><code>BarChart</code> of SCS per window, coloured by pass/fail, with a <code>ReferenceLine</code> at τ.</td>
+</tr>
+<tr>
+<td><code>reasons-list.tsx</code></td>
+<td>Reasons with icons by severity. The Seibold caveat is always last.</td>
+</tr>
+<tr>
+<td><code>disclaimer-banner.tsx</code></td>
+<td>shadcn <code>Alert</code> with the <strong>exact text</strong> below. It appears on every results view, is sticky at the top, and has no close button.</td>
+</tr>
+<tr>
+<td><code>limitations-panel.tsx</code></td>
+<td>shadcn <code>Accordion</code> titled <strong>"System Limitations &amp; Transparency"</strong>, plus a full <code>/limitations</code> page.</td>
+</tr>
+<tr>
+<td>Theme</td>
+<td><code>next-themes</code> light/dark. Chart colours come from CSS variables so they work in both themes.</td>
+</tr>
+<tr>
+<td>Responsive</td>
+<td>Single column under <code>md</code>, so a judge can open it on a phone.</td>
+</tr>
+</tbody>
+</table></div>
+<p>All user-facing wording (verdicts, disclaimer, limitations, metric tooltips) lives in <strong><code>web/lib/copy.ts</code></strong>, so the mandated text exists in exactly one place.</p>
+<h3 id="85-dev-wiring">8.5 Dev wiring</h3>
+<pre><code class="language-ts">// web/next.config.ts
+const nextConfig = {
+  async rewrites() {
+    return [{ source: &quot;/api/:path*&quot;, destination: `${process.env.API_URL ?? &quot;http://127.0.0.1:8000&quot;}/api/:path*` }];
+  },
+};
+export default nextConfig;
+</code></pre>
+<p>The browser only ever calls <code>/api/...</code> on the same origin. Note that Next.js rewrites have a default proxy body limit. If 50 MB uploads fail through the proxy, either raise the limit in <code>next.config.ts</code> or point the dropzone directly at <code>NEXT_PUBLIC_API_URL</code> and enable CORS for that one origin.</p>
+<h3 id="86-deployment-options">8.6 Deployment options</h3>
+<div class="tw"><table>
+<thead>
+<tr>
+<th>Option</th>
+<th>Web</th>
+<th>API</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>A. Local laptop (recommended for the demo)</strong></td>
+<td><code>npm run build &amp;&amp; npm start</code></td>
+<td><code>uvicorn api:app</code></td>
+<td>No network risk; uploads never leave the device</td>
+</tr>
+<tr>
+<td>B. docker-compose</td>
+<td><code>node:22-alpine</code> image</td>
+<td><code>python:3.11-slim</code> + <code>libgl1</code></td>
+<td>Same command on any team laptop</td>
+</tr>
+<tr>
+<td>C. Public link for judges</td>
+<td>Vercel</td>
+<td>Render, Railway or Hugging Face Spaces (Docker, CPU)</td>
+<td>Free tiers sleep, so wake the API before judging. Mention that uploads are processed and deleted.</td>
+</tr>
+</tbody>
+</table></div>
+<p><strong>Disclaimer text (verbatim):</strong></p>
+<blockquote>
+<p><em>Disclaimer: Automated AI forensics results are probabilistic warning signs and can be wrong. This output should not be treated as final proof and must never be used to definitively label a real person as a liar.</em></p>
+</blockquote>
+<p><strong>Limitations panel (minimum content):</strong>
+1. Heavily compressed or pixelated videos (for example, multi-forwarded WhatsApp clips), where compression artefacts destroy rPPG signals.
+2. Videos with extreme camera shake, rapid head movement, or severe lighting changes.
+3. Ultra-high-quality full-head synthesis or style-transferred fakes that preserve spatial pulse coherence across the entire mask.
+4. <em>(added)</em> A detected heartbeat is <strong>not</strong> proof of authenticity: modern face-swaps can inherit the source video's pulse.
+5. <em>(added)</em> rPPG signal strength drops on darker skin tones and in low light, so such clips are more likely to return "Unable to assess". We prefer that to a wrong verdict.
+6. <em>(added)</em> This tool analyses faces only. It does not check audio, lip-sync or edits outside the face.</p>
+<hr />
+<h2 id="9-data-and-ethics">9. Data and ethics</h2>
+<div class="tw"><table>
+<thead>
+<tr>
+<th>Dataset</th>
+<th>Use</th>
+<th>Access</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>UBFC-rPPG</strong> (Dataset 2, 42 subjects)</td>
+<td>Real reference clips; HR MAE benchmark</td>
+<td>Free link on the Benezeth page; cite Bobbia et al. 2017</td>
+</tr>
+<tr>
+<td><strong>FaceForensics++</strong> (c23)</td>
+<td>Real/fake pairs for calibration</td>
+<td>Access form (takes days), about 10 GB for c23 subsets. <strong>Request immediately.</strong></td>
+</tr>
+<tr>
+<td><strong>Celeb-DF v2</strong></td>
+<td>Held-out test</td>
+<td>Request form</td>
+</tr>
+<tr>
+<td>Team-recorded clips</td>
+<td>Live demo</td>
+<td>Only with <strong>written consent</strong> from the person filmed; no third-party faces</td>
+</tr>
+<tr>
+<td>Self-made fake</td>
+<td>Demo "manipulated" clip</td>
+<td>Use a consenting team member's face only, and label it clearly as a demo fake</td>
+</tr>
+</tbody>
+</table></div>
+<p>Rules from the guidelines: no real people's sensitive data without permission. Uploaded videos are processed in memory or a temp file and <strong>never stored</strong>. No face recognition or identity inference. We never call a person a liar.</p>
+<hr />
+<h2 id="10-calibration-and-validation-plan">10. Calibration and validation plan</h2>
+<ol>
+<li><strong>HR accuracy (sanity):</strong> run <code>eval_ubfc_hr.py</code> on UBFC Dataset 2. Report MAE, RMSE and Pearson for GREEN, CHROM and POS. Cross-check against the rPPG-Toolbox unsupervised run.</li>
+<li><strong>Threshold τ:</strong> <code>tools/calibrate.py</code> computes SCS on N real (UBFC + FF++ originals) and N fake (FF++ Deepfakes, FaceSwap, Face2Face, NeuralTextures), using GroupKFold by source ID. It picks τ at a <strong>specificity of at least 90 % on reals</strong>, deliberately biased against false accusations, and reports the resulting sensitivity honestly.</li>
+<li><strong>Robustness sweep:</strong> re-encode the real clips with <code>ffmpeg -crf 23/28/35/40</code> and downscale to 360p and 240p. Plot SCS and SNR against CRF. This shows the point at which the gate correctly switches to "Unable to assess". It is a good slide for the jury.</li>
+<li><strong>Fairness check:</strong> report the "Unable" rate and accuracy by skin-tone group where the dataset allows. Disclose any gap.</li>
+<li><strong>Unit tests:</strong> <code>demo_test.py</code> must pass before every demo.</li>
+</ol>
+<p>Success criteria for the hackathon:
+- Synthetic demo: 100 % correct verdicts across 20 seeds.
+- UBFC POS MAE &lt; 5 bpm.
+- The live demo runs end-to-end (upload → verdict on the website) in under 30 s for a 15 s clip on a laptop.
+- At least one real and one manipulated sample produce the expected verdicts, with clear reasons.</p>
+<hr />
+<h2 id="11-known-risks-and-mitigations">11. Known risks and mitigations</h2>
+<div class="tw"><table>
+<thead>
+<tr>
+<th>Risk</th>
+<th>Mitigation</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>ROI landmark indices are slightly off</td>
+<td>Spend the first hour plotting indices; the overlay frame doubles as a debug view</td>
+</tr>
+<tr>
+<td>Real compressed clips fall into "Unable"</td>
+<td>That is intended behaviour, and we explain it in the pitch. Demo with c23 or uncompressed clips.</td>
+</tr>
+<tr>
+<td>A good fake passes as 🟢</td>
+<td>Expected for high-quality full-face synthesis (limitation 3). The pitch says so openly.</td>
+</tr>
+<tr>
+<td>Skin-tone bias in the YCrCb skin filter</td>
+<td>Use a wide range and test on varied UBFC subjects. Fall back to the landmark polygon alone if fewer than 50 % of its pixels pass.</td>
+</tr>
+<tr>
+<td>MediaPipe or NumPy install conflicts</td>
+<td>Use the fresh conda env (§5); pin versions after the first success</td>
+</tr>
+<tr>
+<td>FF++ access arrives late</td>
+<td>The synthetic scenarios plus a self-made consented fake keep the demo working</td>
+</tr>
+<tr>
+<td>Slow processing</td>
+<td>Downscale to 640 px, cap at 30 s, cache results by file hash; landmarking at ~30–60 fps on a CPU is enough</td>
+</tr>
+<tr>
+<td>Frontend and backend drift apart</td>
+<td>Zod schema mirrors Pydantic; agree the JSON contract on Day 1; build the UI against a saved <code>fixtures/result_real.json</code> before the API exists</td>
+</tr>
+<tr>
+<td>Large upload fails through the Next.js proxy</td>
+<td>Raise the proxy body limit, or upload directly to the API origin (§8.5)</td>
+</tr>
+<tr>
+<td>Cloud free tier asleep during judging</td>
+<td>Demo locally (option A); keep the cloud link only as a backup</td>
+</tr>
+</tbody>
+</table></div>
+<hr />
+<h2 id="12-team-plan-4-members-about-3-days">12. Team plan (4 members, about 3 days)</h2>
+<div class="tw"><table>
+<thead>
+<tr>
+<th>Day</th>
+<th>Member A — Signal</th>
+<th>Member B — Vision + API</th>
+<th>Member C — Web (Next.js)</th>
+<th>Member D — Data/Pitch</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>1</strong></td>
+<td>POS/CHROM/GREEN + filters + PSD in <code>rppg_engine.py</code></td>
+<td>MediaPipe ROI extraction + overlay; verify indices. <strong>Agree the JSON contract with C.</strong></td>
+<td><code>create-next-app</code>, shadcn, layout, <code>copy.ts</code>, verdict badge, disclaimer; build pages against <code>fixtures/result_real.json</code></td>
+<td>Download UBFC; send FF++ form; consent forms</td>
+</tr>
+<tr>
+<td><strong>2</strong></td>
+<td>Coherence features, SCS, gate; <code>synthetic.py</code> + <code>demo_test.py</code> pass</td>
+<td><code>api.py</code>: jobs, uploads, samples, synthetic; temp-file cleanup</td>
+<td>Dropzone, progress polling, Recharts waves, spectrum, timeline, reasons</td>
+<td><code>eval_ubfc_hr.py</code>; run rPPG-Toolbox baseline</td>
+</tr>
+<tr>
+<td><strong>3</strong></td>
+<td><code>calibrate.py</code>, pick τ; robustness sweep</td>
+<td>Real-clip bug fixes; speed; docker-compose</td>
+<td>Polish, responsive, dark mode, limitations page, end-to-end with the live API</td>
+<td>Pitch script + slides; rehearse a 3-min live demo</td>
+</tr>
+</tbody>
+</table></div>
+<hr />
+<h2 id="13-step-4-preview-pitch-skeleton-3-min">13. Step 4 preview — pitch skeleton (3 min)</h2>
+<ol>
+<li><strong>Problem (25 s):</strong> deepfakes in Indian elections, fraud calls and harassment. People need a <em>warning sign</em> before they share, not a verdict.</li>
+<li><strong>How it works (50 s):</strong> a heartbeat changes skin colour, and one heart means every patch of the face pulses together. Deepfakes can copy the <em>rate</em> (2025 research) but struggle to keep <em>regions in sync</em>. We measure that sync.</li>
+<li><strong>Live demo (60 s):</strong> real UBFC clip → 🟢 with synced waves. Manipulated clip → 🟡 with "cheeks out of sync" reasons. WhatsApp-compressed clip → ⚪, with an honest refusal.</li>
+<li><strong>Responsible design (30 s):</strong> disclaimer, three-state output, bias toward "Unable" over false accusations, no data stored, open limitations.</li>
+<li><strong>Next steps (15 s):</strong> learned classifier with GroupKFold, audio-visual lip-sync check, Hindi/regional UI, browser extension, and a share-to-check flow from WhatsApp (the API is already web-ready).</li>
+</ol>
+<hr />
+<h2 id="14-as-built-notes-17-oct-2026">14. As-built notes (17 Oct 2026)</h2>
+<p>What changed from the plan while building, and why:</p>
+<div class="tw"><table>
+<thead>
+<tr>
+<th>Area</th>
+<th>Plan</th>
+<th>Built</th>
+<th>Reason</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>SNR gate</td>
+<td>Pooled-skin SNR</td>
+<td><strong>Best single-region SNR</strong></td>
+<td>Averaging out-of-sync regions destroys the pooled pulse, so fakes were wrongly gated as "Unable to assess" (17/20 in the first test run).</td>
+</tr>
+<tr>
+<td>Ambient check</td>
+<td>Pooled signal</td>
+<td>Best region</td>
+<td>Same reason: the pooled peak was diffuse for fakes, which inflated the background ratio.</td>
+</tr>
+<tr>
+<td>SNR band</td>
+<td>±0.1 Hz</td>
+<td>±max(0.1 Hz, 1/duration)</td>
+<td>A clean 4–6 s clip read about −3 dB, because the spectral peak is wider on short clips.</td>
+</tr>
+<tr>
+<td>Unable verdict UI</td>
+<td>—</td>
+<td>BPM and coherence shown as "—, not reliable for this clip"; no amber shading</td>
+<td>Showing a number for an unusable clip would look like a finding.</td>
+</tr>
+<tr>
+<td>UI kit</td>
+<td>shadcn/ui</td>
+<td>Hand-written Tailwind components (<code>card</code>, <code>btn-primary</code>, tabs, <code>&lt;details&gt;</code> accordion, tooltip)</td>
+<td>Fewer moving parts and no interactive CLI; same look.</td>
+</tr>
+<tr>
+<td>Next.js 16</td>
+<td>—</td>
+<td><code>cacheComponents</code> is on by default. Client components that read the URL (<code>usePathname</code>, <code>useParams</code>, <code>useSearchParams</code>) are wrapped in <code>&lt;Suspense&gt;</code>.</td>
+<td>Otherwise the production build fails ("blocking-prerender-client-hook").</td>
+</tr>
+<tr>
+<td>Extra tool</td>
+<td>—</td>
+<td><code>tools/make_pulse_video.py</code> turns one consented photo into real/fake/short test videos</td>
+<td>Tests the full OpenCV → MediaPipe path without a dataset</td>
+</tr>
+</tbody>
+</table></div>
+<p><strong>Verification results</strong>
+- <code>python demo_test.py</code>: <strong>ALL CHECKS PASSED</strong>. POS 20/20 on every scenario. Mean coherence: real 89.6 %, fake-desync 11.9 %, fake-inherited 11.2 %. BPM error 0.26 bpm. CHROM missed 1 of 20 seeds on the two fake scenarios, both on the darkest skin tone, which it classed as "Unable".
+- Full video path (photo → generated 20 s clips → MediaPipe → engine): real gave 🟢 at 72.07 bpm (true 72) with 99.9 % coherence; fake gave 🟡 at 4.5 % with 7 specific reasons; the 4 s clip gave ⚪. A lossy MP4 re-encode still gave 🟢 at 97 %.
+- API: upload (directly and through the Next.js rewrite), job polling, synthetic, 50 MB limit, wrong-type and missing-sample errors all checked. Temp uploads are deleted. A typical result is about 140 KB of JSON.
+- Web: <code>tsc</code>, <code>eslint</code> and <code>next build</code> are clean. Home, synthetic results and upload results were checked by screenshot at desktop width, and the home page at 375 px.
+- <strong>Not yet done:</strong> HR accuracy on real UBFC clips, τ calibration on FaceForensics++, and the optional docker-compose setup. These need the datasets or Docker.</p>
+<h2 id="15-references">15. References</h2>
+<ol>
+<li>U. A. Ciftci, I. Demir, L. Yin. <em>FakeCatcher: Detection of Synthetic Portrait Videos using Biological Signals.</em> IEEE TPAMI 2020 (arXiv:1901.02212). <code>ref/1901.02212.pdf</code></li>
+<li>C. Seibold, E. L. Wisotzky, A. Beckmann, B. Kossack, A. Hilsmann, P. Eisert. <em>High-quality deepfakes have a heart!</em> Frontiers in Imaging, 2025. <code>ref/fimag-4-1504551.pdf</code></li>
+<li>S. Bobbia, R. Macwan, Y. Benezeth, A. Mansouri, J. Dubois. <em>Unsupervised skin tissue segmentation for remote photoplethysmography.</em> Pattern Recognition Letters, 2017 (UBFC-rPPG). <code>ref/Y. Benezeth - UBFCrPPG.pdf</code></li>
+<li>Hari (@harixganesh). <em>Deepfake detection from your pulse: how it works and how to build it.</em> <code>ref/Deepfake detection from your pulse_ how it works and how to build it.pdf</code></li>
+<li>Cyber Samvad Hackathon 2026, <em>Problem Statements &amp; Student Guidelines.</em> <code>ref/Cyber_Samvad_Hackathon_2026_Problem_Statements_and_Student_Guidelines.pdf</code></li>
+<li>X. Liu et al. <em>rPPG-Toolbox: Deep Remote PPG Toolbox.</em> NeurIPS 2023. https://github.com/ubicomplab/rPPG-Toolbox (Responsible AI Source Code License)</li>
+<li>W. Wang, A. C. den Brinker, S. Stuijk, G. de Haan. <em>Algorithmic principles of remote PPG.</em> IEEE TBME 64(7), 2017 (POS).</li>
+<li>G. de Haan, V. Jeanne. <em>Robust pulse rate from chrominance-based rPPG.</em> IEEE TBME 60(10), 2013 (CHROM).</li>
+<li>W. Verkruysse, L. O. Svaasand, J. S. Nelson. <em>Remote plethysmographic imaging using ambient light.</em> Optics Express 16, 2008 (GREEN).</li>
+<li>A. Rössler et al. <em>FaceForensics++: Learning to Detect Manipulated Facial Images.</em> ICCV 2019.</li>
+</ol></main></div></body></html>

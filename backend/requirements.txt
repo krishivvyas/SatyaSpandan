@@ -1,0 +1,11 @@
+# Pinned to the versions verified on 17 Oct 2026 (Python 3.11, conda env "satya").
+numpy==2.2.6
+scipy==1.17.1
+opencv-python-headless==5.0.0.93
+mediapipe==1.1.1
+scikit-learn==1.9.1
+fastapi==0.143.3
+uvicorn[standard]==0.54.0
+python-multipart==0.0.32
+pydantic==2.14.1
+matplotlib==3.11.2   # only for demo_test.py plots

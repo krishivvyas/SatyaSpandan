@@ -1,0 +1,26 @@
+[
+  {
+    "id": "real_ubfc",
+    "title": "Real reference (UBFC-rPPG)",
+    "description": "Uncompressed webcam clip with pulse-oximeter ground truth. Place a UBFC-rPPG subject video here as real_ubfc.mp4 (cite Bobbia et al. 2017).",
+    "licence": "UBFC-rPPG research dataset, Univ. Bourgogne Franche-Comte",
+    "kind": "real",
+    "file": "real_ubfc.mp4"
+  },
+  {
+    "id": "fake_demo",
+    "title": "Manipulated demo clip",
+    "description": "A face-swap made from a consenting team member's own face, clearly labelled as a demo fake. Place it here as fake_demo.mp4.",
+    "licence": "Team-made with written consent",
+    "kind": "fake",
+    "file": "fake_demo.mp4"
+  },
+  {
+    "id": "compressed_demo",
+    "title": "Heavily compressed clip",
+    "description": "The real reference re-encoded at very low quality (ffmpeg -crf 40) to show an honest 'Unable to assess'. Place it here as compressed_demo.mp4.",
+    "licence": "Derived from the real reference",
+    "kind": "other",
+    "file": "compressed_demo.mp4"
+  }
+]
